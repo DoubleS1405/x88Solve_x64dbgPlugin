@@ -1659,7 +1659,6 @@ Value* GetMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOpera
 			MemValue[targetMem1].push_back(rstIR0);
 #ifdef DEBUG
 			_plugin_logprintf("[GetMemoryValue] %p :%x\n", targetMem1, readByte);
-			MessageBoxA(0, "Test", "Test", 0);
 #endif
 			irList.push_back(rstIR0);
 		}
@@ -1673,7 +1672,6 @@ Value* GetMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOpera
 			MemValue[targetMem2].push_back(rstIR1);
 #ifdef DEBUG
 			_plugin_logprintf("[GetMemoryValue] %p :%x\n", targetMem2, readByte);
-			MessageBoxA(0, "Test2", "Test2", 0);
 #endif
 			irList.push_back(rstIR1);
 		}
@@ -1687,7 +1685,6 @@ Value* GetMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOpera
 			MemValue[targetMem3].push_back(rstIR2);
 #ifdef DEBUG
 			_plugin_logprintf("[GetMemoryValue] %p :%x\n", targetMem3, readByte);
-			MessageBoxA(0, "Test3", "Test3", 0);
 #endif
 			irList.push_back(rstIR2);
 		}
@@ -1700,14 +1697,10 @@ Value* GetMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOpera
 			MemValue[targetMem4].push_back(rstIR3);
 #ifdef DEBUG
 			_plugin_logprintf("[GetMemoryValue] %p :%x\n", targetMem4, readByte);
-			MessageBoxA(0, "Test4", "Test4", 0);
 #endif
 			irList.push_back(rstIR3);
 		}
 		offset4Value = MemValue[targetMem4].back();
-#ifdef DEBUG
-		MessageBoxA(0, "offset4Value", "offset4Value", 0);
-#endif
 
 		if (dynamic_cast<IR*>(offset1Value) &&
 			dynamic_cast<IR*>(offset2Value) &&
@@ -1719,16 +1712,11 @@ Value* GetMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOpera
 				dynamic_cast<IR*>(offset3Value)->opr == IR::OPR::OPR_BVV &&
 				dynamic_cast<IR*>(offset4Value)->opr == IR::OPR::OPR_BVV)
 			{
-
-#ifdef DEBUG
-				MessageBoxA(0, "offset1~4 is const", "offset1~4 is const", 0);
-#endif
-
 				op1ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset1Value)->Operands[0]->valuePtr)->intVar << 24;
 				op2ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset2Value)->Operands[0]->valuePtr)->intVar << 16;
 				op3ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset3Value)->Operands[0]->valuePtr)->intVar << 8;
-				op4ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset3Value)->Operands[0]->valuePtr)->intVar & 0xff;
-				foldedConstValue = op1ConstValue | op2ConstValue | op3ConstValue | op3ConstValue;
+				op4ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset4Value)->Operands[0]->valuePtr)->intVar & 0xff;
+				foldedConstValue = op1ConstValue | op2ConstValue | op3ConstValue | op4ConstValue;
 
 				rstIR = CraeteBVVIR(foldedConstValue, 32);
 				irList.push_back(rstIR);
@@ -1770,6 +1758,23 @@ Value* GetMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOpera
 			irList.push_back(rstIR1);
 		}
 		offset2Value = MemValue[targetMem2].back();
+
+		if (dynamic_cast<IR*>(offset1Value) &&
+			dynamic_cast<IR*>(offset2Value))
+		{
+			if (dynamic_cast<IR*>(offset1Value)->opr == IR::OPR::OPR_BVV &&
+				dynamic_cast<IR*>(offset2Value)->opr == IR::OPR::OPR_BVV)
+			{
+				op1ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset1Value)->Operands[0]->valuePtr)->intVar << 24;
+				op2ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset2Value)->Operands[0]->valuePtr)->intVar << 16;
+				foldedConstValue = op1ConstValue | op2ConstValue;
+
+				rstIR = CraeteBVVIR(foldedConstValue, 16);
+				irList.push_back(rstIR);
+				return rstIR;
+			}
+
+		}
 
 		rstIR = new IR(IR::OPR::OPR_CONCAT, offset1Value, offset2Value);
 		rstIR->Size = 16;
