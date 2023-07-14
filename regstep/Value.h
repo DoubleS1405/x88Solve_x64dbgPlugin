@@ -229,7 +229,7 @@ public:
 		std::shared_ptr<BTreeNode>  ptr3 = std::make_shared<BTreeNode>(MakeBTreeNode(op3->Name));
 		MakeThirdSubTree(ast, op3->ast);
 	}
-
+#define DEBUG
 	IR(OPR _opr, Value* op1, Value* op2, Value* op3, Value* op4)
 	{
 		opr = _opr;
@@ -246,12 +246,24 @@ public:
 
 		std::shared_ptr<BTreeNode>  ptr2 = std::make_shared<BTreeNode>(MakeBTreeNode(op2->Name));
 		MakeRightSubTree(ast, op2->ast);
+#ifdef DEBUG
+		MessageBoxA(0, "Op2", "Op2", 0);
+#endif
+
 
 		std::shared_ptr<BTreeNode>  ptr3 = std::make_shared<BTreeNode>(MakeBTreeNode(op3->Name));
 		MakeThirdSubTree(ast, op3->ast);
 
+#ifdef DEBUG
+		MessageBoxA(0, "Op3", "Op3", 0);
+#endif
+
 		std::shared_ptr<BTreeNode>  ptr4 = std::make_shared<BTreeNode>(MakeBTreeNode(op4->Name));
 		MakeFourthSubTree(ast, op4->ast);
+
+#ifdef DEBUG
+		MessageBoxA(0, "Op4", "Op4", 0);
+#endif
 	}
 	string printOpr(OPR _opr);
 };

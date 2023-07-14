@@ -1622,68 +1622,182 @@ Value* GetMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOpera
 	Value* offsetImm3;
 	Value* offsetImm4;
 
-	Value* offset0Value;
 	Value* offset1Value;
 	Value* offset2Value;
 	Value* offset3Value;
+	Value* offset4Value;
 
-	DWORD targetMem = 0;
-	GetEffectiveAddress32(_decodedOperandPtr, _regdump);
-	// Base
-	if (_decodedOperandPtr->mem.base != ZYDIS_REGISTER_NONE)
+	Value* foldedValue;
+
+	DWORD targetMem1 = 0;
+	DWORD targetMem2 = 0;
+	DWORD targetMem3 = 0;
+	DWORD targetMem4 = 0;
+
+	DWORD op1ConstValue = 0;
+	DWORD op2ConstValue = 0;
+	DWORD op3ConstValue = 0;
+	DWORD op4ConstValue = 0;
+	DWORD foldedConstValue = 0;
+
+	BYTE readByte;
+
+	// 1. EA를 구한다.
+	targetMem1 = GetEffectiveAddress32(_decodedOperandPtr, _regdump);
+	targetMem2 = targetMem1 + 1;
+	targetMem3 = targetMem1 + 2;
+	targetMem4 = targetMem1 + 3;
+
+	// 2. EA에 대한 MemValue를 찾는다. Operand Size에 따라서 1바이트(offset1Value1), 2바이트(Concat offset1Value1~offset1Valu2), 4바이트(Concat offset1Value1~offset1Valu4) 단위로 찾는다.
+	if (_decodedOperandPtr->size == 32)
 	{
-		BaseValue = GetRegisterValue(_decodedOperandPtr->mem.base, _regdump, irList);
-
-		if (_decodedOperandPtr->mem.disp.has_displacement)
+		// Target Memory Address에 대한 Value* 를 얻는다.
+		if (MemValue.find(targetMem1)==MemValue.end())
 		{
-			// [Base + Index*Scale + Disp]
-			if (_decodedOperandPtr->mem.index != ZYDIS_REGISTER_NONE)
+			DbgMemRead(targetMem1, &readByte, 1);
+			rstIR0 = CraeteBVVIR(readByte, 8);
+			MemValue[targetMem1].push_back(rstIR0);
+#ifdef DEBUG
+			_plugin_logprintf("[GetMemoryValue] %p :%x\n", targetMem1, readByte);
+			MessageBoxA(0, "Test", "Test", 0);
+#endif
+			irList.push_back(rstIR0);
+		}
+		offset1Value = MemValue[targetMem1].back();
+
+		// Target Memory Address + 1에 대한 Value* 를 얻는다.
+		if (MemValue.find(targetMem2) == MemValue.end())
+		{
+			DbgMemRead(targetMem2, &readByte, 1);
+			rstIR1 = CraeteBVVIR(readByte, 8);
+			MemValue[targetMem2].push_back(rstIR1);
+#ifdef DEBUG
+			_plugin_logprintf("[GetMemoryValue] %p :%x\n", targetMem2, readByte);
+			MessageBoxA(0, "Test2", "Test2", 0);
+#endif
+			irList.push_back(rstIR1);
+		}
+		offset2Value = MemValue[targetMem2].back();
+
+		// Target Memory Address + 1 에 대한 Value* 를 얻는다.
+		if (MemValue.find(targetMem3) == MemValue.end())
+		{
+			DbgMemRead(targetMem3, &readByte, 1);
+			rstIR2 = CraeteBVVIR(readByte, 8);
+			MemValue[targetMem3].push_back(rstIR2);
+#ifdef DEBUG
+			_plugin_logprintf("[GetMemoryValue] %p :%x\n", targetMem3, readByte);
+			MessageBoxA(0, "Test3", "Test3", 0);
+#endif
+			irList.push_back(rstIR2);
+		}
+		offset3Value = MemValue[targetMem3].back();
+
+		if (MemValue.find(targetMem4) == MemValue.end())
+		{
+			DbgMemRead(targetMem4, &readByte, 1);
+			rstIR3 = CraeteBVVIR(readByte, 8);
+			MemValue[targetMem4].push_back(rstIR3);
+#ifdef DEBUG
+			_plugin_logprintf("[GetMemoryValue] %p :%x\n", targetMem4, readByte);
+			MessageBoxA(0, "Test4", "Test4", 0);
+#endif
+			irList.push_back(rstIR3);
+		}
+		offset4Value = MemValue[targetMem4].back();
+#ifdef DEBUG
+		MessageBoxA(0, "offset4Value", "offset4Value", 0);
+#endif
+
+		if (dynamic_cast<IR*>(offset1Value) &&
+			dynamic_cast<IR*>(offset2Value) &&
+			dynamic_cast<IR*>(offset3Value) &&
+			dynamic_cast<IR*>(offset4Value))
+		{
+			if (dynamic_cast<IR*>(offset1Value)->opr == IR::OPR::OPR_BVV &&
+				dynamic_cast<IR*>(offset2Value)->opr == IR::OPR::OPR_BVV &&
+				dynamic_cast<IR*>(offset3Value)->opr == IR::OPR::OPR_BVV &&
+				dynamic_cast<IR*>(offset4Value)->opr == IR::OPR::OPR_BVV)
 			{
-				CraeteBinaryIR(BaseValue, Disp, IR::OPR_ADD);
+
+#ifdef DEBUG
+				MessageBoxA(0, "offset1~4 is const", "offset1~4 is const", 0);
+#endif
+
+				op1ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset1Value)->Operands[0]->valuePtr)->intVar << 24;
+				op2ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset2Value)->Operands[0]->valuePtr)->intVar << 16;
+				op3ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset3Value)->Operands[0]->valuePtr)->intVar << 8;
+				op4ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset3Value)->Operands[0]->valuePtr)->intVar & 0xff;
+				foldedConstValue = op1ConstValue | op2ConstValue | op3ConstValue | op3ConstValue;
+
+				rstIR = CraeteBVVIR(foldedConstValue, 32);
+				irList.push_back(rstIR);
+				return rstIR;
 			}
 
-			// [Base + Disp]
-			else
-			{
-
-			}
 		}
 
-		// Displacement가 없는경우
-		else
-		{
-			// [Base + Index*Scale]
-			if (_decodedOperandPtr->mem.index != ZYDIS_REGISTER_NONE)
-			{
-
-			}
-			// [Base]
-			else
-			{
-				if (decodedInstPtr->address_width == 32)
-				{
-					// Base 레지스터의 Value가 상수인 경우 EA는 상수이므로 해당 EA에 대한 Memory Value Pool에 저장한다.
-					//if (dynamic_cast<ConstInt*>(BaseValue))
-					{
-						// 메모리 주소로부터 0부터 3바이트 주소에 대한 Memory Value Pool이 모두 존재해야 함
-						if (MemValue.find(targetMem) != MemValue.end() &&
-							MemValue.find(targetMem + 1) != MemValue.end() &&
-							MemValue.find(targetMem + 2) != MemValue.end() &&
-							MemValue.find(targetMem + 3) != MemValue.end())
-						{
-							printf("test");
-							rstIR = CraeteLoadIR(BaseValue, IR::OPR_LOAD);
-							irList.push_back(rstIR);
-						}
-					}
-				}
-			}
-		}
+		rstIR = new IR(IR::OPR::OPR_CONCAT, offset1Value, offset2Value, offset3Value, offset4Value);
+		rstIR->Size = 32;
+		rstIR->OperandType = rstIR->OPERANDTYPE_MEMORY;
+		irList.push_back(rstIR);
 	}
 
-	// SIB
+	else if (_decodedOperandPtr->size == 16)
+	{
+		// Target Memory Address에 대한 Value* 를 얻는다.
+		if (MemValue.find(targetMem1) == MemValue.end())
+		{
+			DbgMemRead(targetMem1, &readByte, 1);
+			rstIR0 = CraeteBVVIR(readByte, 8);
+			MemValue[targetMem1].push_back(rstIR0);
+#ifdef DEBUG
+			_plugin_logprintf("[GetMemoryValue] %p :%x\n", targetMem1, readByte);
+#endif
+			irList.push_back(rstIR0);
+		}
+		offset1Value = MemValue[targetMem1].back();
 
-	// Disp
+		// Target Memory Address + 1에 대한 Value* 를 얻는다.
+		if (MemValue.find(targetMem2) == MemValue.end())
+		{
+			DbgMemRead(targetMem2, &readByte, 1);
+			rstIR1 = CraeteBVVIR(readByte, 8);
+			MemValue[targetMem2].push_back(rstIR1);
+#ifdef DEBUG
+			_plugin_logprintf("[GetMemoryValue] %p :%x\n", targetMem2, readByte);
+#endif
+			irList.push_back(rstIR1);
+		}
+		offset2Value = MemValue[targetMem2].back();
+
+		rstIR = new IR(IR::OPR::OPR_CONCAT, offset1Value, offset2Value);
+		rstIR->Size = 16;
+		rstIR->OperandType = rstIR->OPERANDTYPE_MEMORY;
+		irList.push_back(rstIR);
+	}
+
+	else if (_decodedOperandPtr->size == 8)
+	{
+		// Target Memory Address에 대한 Value* 를 얻는다.
+		if (MemValue.find(targetMem1) == MemValue.end())
+		{
+			DbgMemRead(targetMem1, &readByte, 1);
+			rstIR0 = CraeteBVVIR(readByte, 8);
+			MemValue[targetMem1].push_back(rstIR0);
+#ifdef DEBUG
+			_plugin_logprintf("[GetMemoryValue] %p :%x\n", targetMem1, readByte);
+#endif
+			irList.push_back(rstIR0);
+		}
+		offset1Value = MemValue[targetMem1].back();
+		return offset1Value;
+	}
+
+#ifdef DEBUG
+	MessageBoxA(0, "rst", "rst", 0);
+#endif
+
 	return rstIR;
 }
 
@@ -2760,7 +2874,6 @@ z3::expr GetZ3ExprFromTree(std::shared_ptr<BTreeNode> bt)
 		if (bt->valPtr == NULL)
 		{
 			_plugin_logprintf("valptr is NULL\n");
-			MessageBoxA(0, "Test2", "Test2", 0);
 		}
 
 		else
@@ -2768,7 +2881,6 @@ z3::expr GetZ3ExprFromTree(std::shared_ptr<BTreeNode> bt)
 			if (dynamic_cast<ConstInt*>(bt->valPtr))
 			{
 				_plugin_logprintf("Test : %x\n", (unsigned int)dynamic_cast<ConstInt*>(bt->valPtr)->intVar);
-				MessageBoxA(0, "Test3", "Test3", 0);
 				if (dynamic_cast<ConstInt*>(bt->valPtr)->Size == 32)
 				{
 

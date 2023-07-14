@@ -1194,7 +1194,6 @@ PLUG_EXPORT void CBBREAKPOINT(CBTYPE cbType, PLUG_CB_BREAKPOINT* info)
 
 			// 생성된 Z3 AST 출력
 			_plugin_logprintf("Z3 AST: %s\n", z3Expression.simplify().to_string().c_str());
-			MessageBoxA(0, "test", "test", 0);
 			if (it1.first == StartAddress + 0xB1E9)
 			{
 				z3::solver solver(*z3Context);
