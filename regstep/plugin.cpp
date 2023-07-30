@@ -613,18 +613,8 @@ PLUG_EXPORT void CBTRACEEXECUTE(CBTYPE cbType, PLUG_CB_TRACEEXECUTE* info)
 	ZydisDecoderDecodeFull(&Decoder, buf, 15, &DecodedInst, DecodedOperand,
 		ZYDIS_MAX_OPERAND_COUNT_VISIBLE, ZYDIS_DFLAG_VISIBLE_OPERANDS_ONLY);
 
-	CreateIR(&DecodedInst, DecodedOperand, regdump, regdump.regcontext.cip);
-
-	if (IRList.find(regdump.regcontext.cip) != IRList.end())
-	{
-		_plugin_logprintf("--------------------------------\n");
-		for (auto it : IRList[regdump.regcontext.cip])
-		{
-			_plugin_logprintf("[%p]", regdump.regcontext.cip);
-			printIR(it);
-		}
-		_plugin_logprintf("--------------------------------\n");
-	}
+	CreateIR(&DecodedInst, DecodedOperand, regdump, info->cip);
+	_plugin_logprintf("Create IR :%p\n", info->cip);
 
 }
 
@@ -1184,37 +1174,53 @@ PLUG_EXPORT void CBBREAKPOINT(CBTYPE cbType, PLUG_CB_BREAKPOINT* info)
 
 	for (auto it1 : IRList)
 	{
-		printf("--------------------------------\n");
+		_plugin_logprintf("--------------------------------\n");
 		for (auto it : it1.second)
 		{
-			_plugin_logprintf("[%p]", it1.first);
-			//InorderTraverse(it->ast);
-			_plugin_logprintf("%s", EvaluateExpTree(it->ast).c_str());
-			z3::expr z3Expression = GetZ3ExprFromTree(it->ast);
-
-			// 积己等 Z3 AST 免仿
-			_plugin_logprintf("Z3 AST: %s\n", z3Expression.simplify().to_string().c_str());
-			if (it1.first == StartAddress + 0xB1E9)
+			if(it == nullptr)
+				_plugin_logprintf("[%p] it is null\n");
+			else
 			{
-				z3::solver solver(*z3Context);
-				z3Expression = z3Expression == 0x41;
-				solver.add(z3Expression);
-				z3::check_result result = solver.check();
-
-				if (result == z3::sat) {
-
-					// Get the model
-					z3::model model = solver.get_model();
-
-					_plugin_logprintf("Solve %s\n", model.to_string().c_str());
-				}
-				else if (result == z3::unsat) {
-					_plugin_logprintf("unsat\n");
-				}
+				_plugin_logprintf("[%p]", it1.first);
+				printIR(it);
 			}
 		}
-		printf("--------------------------------\n");
+		_plugin_logprintf("--------------------------------\n");
 	}
+
+	//for (auto it1 : IRList)
+	//{
+	//	printf("--------------------------------\n");
+	//	for (auto it : it1.second)
+	//	{
+	//		_plugin_logprintf("[%p]", it1.first);
+	//		//InorderTraverse(it->ast);
+	//		_plugin_logprintf("%s", EvaluateExpTree(it->ast).c_str());
+	//		z3::expr z3Expression = GetZ3ExprFromTree(it->ast);
+
+	//		// 积己等 Z3 AST 免仿
+	//		_plugin_logprintf("Z3 AST: %s\n", z3Expression.simplify().to_string().c_str());
+	//		if (it1.first == StartAddress + 0xB1E9)
+	//		{
+	//			z3::solver solver(*z3Context);
+	//			z3Expression = z3Expression == 0x41;
+	//			solver.add(z3Expression);
+	//			z3::check_result result = solver.check();
+
+	//			if (result == z3::sat) {
+
+	//				// Get the model
+	//				z3::model model = solver.get_model();
+
+	//				_plugin_logprintf("Solve %s\n", model.to_string().c_str());
+	//			}
+	//			else if (result == z3::unsat) {
+	//				_plugin_logprintf("unsat\n");
+	//			}
+	//		}
+	//	}
+	//	printf("--------------------------------\n");
+	//}
 	//Script::Debug::DeleteBreakpoint(info->breakpoint->addr);
 	//DbgCmdExec("StopRunTrace");
 	//DbgCmdExec("TraceIntoIntoTraceRecord 5000000");
@@ -1268,6 +1274,27 @@ PLUG_EXPORT void CBCREATEPROCESS(CBTYPE ctype, PLUG_CB_CREATEPROCESS* info)
 	IR* regEax8lIR = new IR("EAX8L", RegValue[REG_EAX_8L].size(), IR::OPR::OPR_EXTRACT8L, eaxValue);
 	regEax8lIR->Size = 8;
 	RegValue[REG_EAX_8L].push_back(regEax8lIR);
+	_plugin_logprintf("%s StartAddress:%p, EndAddress:%p\n", modInfo.name, StartAddress, EndAddress);
+
+	Value* espValue = new Value("ESP", 0);
+	espValue->ast = std::make_shared<BTreeNode>(MakeBTreeNode(espValue->Name));
+	espValue->ast->m_NodeType = NT_SYMVAR;
+	espValue->Size = 32;
+	z3::expr* z3esp = new z3::expr(z3Context->bv_const("ESP(0)", 32));
+	//z3Equation = new z3::expr(*z3esp);
+	symbolExprMap["ESP(0)"] = z3esp;
+
+	IR* regEsp16hIR = new IR("ESP16H", RegValue[REG_EBP_16H].size(), IR::OPR::OPR_EXTRACT16H, espValue);
+	regEsp16hIR->Size = 16;
+	RegValue[REG_EBP_16H].push_back(regEsp16hIR);
+
+	IR* regEsp8hIR = new IR("ESP8H", RegValue[REG_EBP_8H].size(), IR::OPR::OPR_EXTRACT8H, espValue);
+	regEsp8hIR->Size = 8;
+	RegValue[REG_EBP_8H].push_back(regEsp8hIR);
+
+	IR* regEsp8lIR = new IR("ESP8L", RegValue[REG_EBP_8L].size(), IR::OPR::OPR_EXTRACT8L, espValue);
+	regEsp8lIR->Size = 8;
+	RegValue[REG_EBP_8L].push_back(regEsp8lIR);
 	_plugin_logprintf("%s StartAddress:%p, EndAddress:%p\n", modInfo.name, StartAddress, EndAddress);
 }
 

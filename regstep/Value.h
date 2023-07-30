@@ -109,6 +109,7 @@ public:
 		OPR_LOAD,
 		OPR_ADD,
 		OPR_SUB,
+		OPR_MUL,
 		OPR_AND,
 		OPR_OR,
 		OPR_XOR,
@@ -161,6 +162,10 @@ public:
 
 	IR(OPR _opr, Value* op1, Value* op2)
 	{
+		if (op1->Size != op2->Size)
+		{
+			printf("[IR] Operand size is mismatching\n");
+		}
 		opr = _opr;
 		AddOperand(op1);
 		AddOperand(op2);

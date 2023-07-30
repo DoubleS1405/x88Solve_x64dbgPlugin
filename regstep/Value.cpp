@@ -11,6 +11,7 @@ extern z3::expr* z3Equation;
 extern map<string, z3::expr*> symbolExprMap;
 
 DWORD tmpNum = 0;
+Value* GetImmValue(DWORD _immValue, BYTE _size, vector<IR*>& irList);
 
 Value::Value()
 {
@@ -1343,7 +1344,7 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 	return nullptr;
 }
 
-void SaveMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOperand* _decodedOperandPtr, Value* _regValue, REGDUMP& _regdump, vector<IR*>& irList)
+void SaveMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOperand* _decodedOperandPtr, Value* _toSaveValue, REGDUMP& _regdump, vector<IR*>& irList)
 {
 	IR* rstIR0 = nullptr;
 	IR* rstIR1 = nullptr;
@@ -1351,8 +1352,6 @@ void SaveMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOperan
 	IR* rstIR3 = nullptr;
 	IR* rstIR = nullptr;
 
-	Value* BaseValue;
-	Value* Disp = nullptr;
 	Value* op3;
 	IR* offset1;
 	IR* offset2;
@@ -1369,27 +1368,53 @@ void SaveMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOperan
 	Value* offset2Value;
 	Value* offset3Value;
 
+	Value* BaseValue = nullptr;;
+	Value* Disp = nullptr;
+	Value* Scale = nullptr;;
+	Value* IndexValue = nullptr;;
+
+	IR* BaseDisp = nullptr;;
+	IR* ScaleIndex = nullptr;;
+	IR* EAValue = nullptr;;
+
 	DWORD _targetMem;
+
+	// 1. EA 계산
 	_targetMem = GetEffectiveAddress32(_decodedOperandPtr, _regdump);
 
-	// Base
+	// 2. EA를 계산하기 위한 IR 생성
+	// 2-1. 오퍼랜드에 Base가 존재하는 경우
 	if (_decodedOperandPtr->mem.base != ZYDIS_REGISTER_NONE)
 	{
 		BaseValue = GetRegisterValue(_decodedOperandPtr->mem.base, _regdump, irList);
 
+		if (BaseValue == nullptr)
+			MessageBoxA(0, "BaseValue is null", "SaveMemoryValue", 0);
+
 		if (_decodedOperandPtr->mem.disp.has_displacement)
 		{
 			// [Base + Index*Scale + Disp]
-			Value* BaseDisp = CraeteBinaryIR(BaseValue, Disp, IR::OPR_ADD);
+
+			// Base + Disp
+			Disp = GetImmValue(_decodedOperandPtr->mem.disp.value, 32,irList);
+			BaseDisp = CraeteBinaryIR(BaseValue, Disp, IR::OPR_ADD);
+			irList.push_back(BaseDisp);
+
 			if (_decodedOperandPtr->mem.index != ZYDIS_REGISTER_NONE)
 			{
+				Scale = GetImmValue(_decodedOperandPtr->mem.scale, 32, irList);
+				IndexValue = GetRegisterValue(_decodedOperandPtr->mem.index, _regdump, irList);
+				ScaleIndex = CraeteBinaryIR(Scale, IndexValue, IR::OPR_MUL);
+				irList.push_back(ScaleIndex);
+				EAValue = CraeteBinaryIR(BaseDisp, ScaleIndex, IR::OPR_ADD);
+				irList.push_back(EAValue);
 
 			}
 
 			// [Base + Disp]
 			else
 			{
-
+				EAValue = BaseDisp;
 			}
 		}
 
@@ -1399,91 +1424,116 @@ void SaveMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOperan
 			// [Base + Index*Scale]
 			if (_decodedOperandPtr->mem.index != ZYDIS_REGISTER_NONE)
 			{
-
+				Scale = GetImmValue(_decodedOperandPtr->mem.scale, 32, irList);
+				IndexValue = GetRegisterValue(_decodedOperandPtr->mem.index, _regdump, irList);
+				ScaleIndex = CraeteBinaryIR(Scale, IndexValue, IR::OPR_MUL);
+				irList.push_back(ScaleIndex);
+				EAValue = CraeteBinaryIR(BaseValue, ScaleIndex, IR::OPR_ADD);
+				irList.push_back(EAValue);
 			}
 			// [Base]
 			else
 			{
-				if (decodedInstPtr->address_width == 32)
-				{
-					// Base 레지스터의 Value가 상수인 경우 EA는 상수이므로 해당 EA에 대한 Memory Value Pool에 저장한다.					
-					{
-						DWORD _memAddr = _targetMem;
-						IR* reg8hh;
-						IR* reg8hlIR;
-						IR* reg8hIR;
-						IR* reg8lIR;
-
-						// 메모리에 저장할 Value가 상수인 경우
-						if (dynamic_cast<ConstInt*>(_regValue))
-						{
-							printf("SaveMemoryValue -> Value is Constnat\n");
-						}
-
-						// 메모리에 저장할 Value가 상수가 아닌 경우
-						else
-						{
-							if (MemValue.find(_memAddr + 3) != MemValue.end())
-							{
-								reg8hh = new IR(_regValue->Name, MemValue[_memAddr + 3].size(), IR::OPR::OPR_EXTRACT8HH, _regValue);
-							}
-							else
-								reg8hh = new IR(_regValue->Name, 0, IR::OPR::OPR_EXTRACT8HH, _regValue);
-
-							MemValue[_memAddr + 3].push_back(reg8hh);
-							irList.push_back(reg8hh);
-
-							if (MemValue.find(_memAddr + 2) != MemValue.end())
-							{
-								reg8hlIR = new IR(_regValue->Name, MemValue[_memAddr + 2].size(), IR::OPR::OPR_EXTRACT8HL, _regValue);
-							}
-							else
-								reg8hlIR = new IR(_regValue->Name, 0, IR::OPR::OPR_EXTRACT8HL, _regValue);
-
-							MemValue[_memAddr + 2].push_back(reg8hlIR);
-							irList.push_back(reg8hlIR);
-
-							if (MemValue.find(_memAddr + 1) != MemValue.end())
-							{
-								reg8hIR = new IR(_regValue->Name, MemValue[_memAddr + 1].size(), IR::OPR::OPR_EXTRACT8H, _regValue);
-							}
-							else
-								reg8hIR = new IR(_regValue->Name, 0, IR::OPR::OPR_EXTRACT8H, _regValue);
-
-							MemValue[_memAddr + 1].push_back(reg8hIR);
-							irList.push_back(reg8hIR);
-
-							if (MemValue.find(_memAddr) != MemValue.end())
-							{
-								reg8lIR = new IR(_regValue->Name, MemValue[_memAddr].size(), IR::OPR::OPR_EXTRACT8L, _regValue);
-							}
-							else
-								reg8lIR = new IR(_regValue->Name, 0, IR::OPR::OPR_EXTRACT8L, _regValue);
-							MemValue[_memAddr].push_back(reg8lIR);
-							irList.push_back(reg8lIR);
-							rstIR = CraeteStoreIR(BaseValue, _regValue, IR::OPR_STORE);
-							rstIR->isHiddenRHS = true;
-							irList.push_back(rstIR);
-						}
-					}
-
-					// EA 가 상수가 아닌 경우 (EA가 알 수 없는 경우)
-					// Store EA, Value
-
-					{
-						// rstIR0 = Load BaseValue
-						rstIR = CraeteStoreIR(BaseValue, _regValue, IR::OPR_STORE);
-						rstIR->isHiddenRHS = true;
-						irList.push_back(rstIR);
-					}
-				}
+				
 			}
 		}
 	}
 
-	// SIB
+	// 2-2. 오퍼랜드에 Base가 존재하지 않는 경우
 
 	// Disp
+
+	if (decodedInstPtr->address_width == 32)
+	{
+		// Base 레지스터의 Value가 상수인 경우 EA는 상수이므로 해당 EA에 대한 Memory Value Pool에 저장한다.					
+		{
+			DWORD _memAddr = _targetMem;
+			IR* reg8hh;
+			IR* reg8hlIR;
+			IR* reg8hIR;
+			IR* reg8lIR;
+
+			// 3. Store 명령어 생성
+			rstIR = CraeteStoreIR(EAValue, _toSaveValue, IR::OPR_STORE);
+			rstIR->isHiddenRHS = true;
+			irList.push_back(rstIR);
+
+			// 4. 메모리의 각 1바이트 별로 Value를 저장함. 
+			// 메모리에 저장할 Value가 상수인 경우
+			if (dynamic_cast<ConstInt*>(_toSaveValue))
+			{
+				printf("SaveMemoryValue -> Value is Constnat\n");
+			}
+
+			// 메모리에 저장할 Value가 상수가 아닌 경우
+			else
+			{
+				if (MemValue.find(_memAddr + 3) != MemValue.end())
+				{
+					reg8hh = new IR(IR::OPR::OPR_EXTRACT8HH, _toSaveValue);
+					vector<Value*> tempVecMemAddr3;
+					tempVecMemAddr3.push_back(reg8hh);
+					MemValue.insert(make_pair(_memAddr + 3, tempVecMemAddr3));
+				}
+				else
+					reg8hh = new IR(IR::OPR::OPR_EXTRACT8HH, _toSaveValue);
+
+				MemValue[_memAddr + 3].push_back(reg8hh);
+				irList.push_back(reg8hh);
+				//rstIR3 = CraeteStoreIR(BaseValue, _toSaveValue, IR::OPR_STORE);
+				//rstIR3->isHiddenRHS = true;
+
+				if (MemValue.find(_memAddr + 2) != MemValue.end())
+				{
+					reg8hlIR = new IR(IR::OPR::OPR_EXTRACT8HL, _toSaveValue);
+					vector<Value*> tempVecMemAddr2;
+					tempVecMemAddr2.push_back(reg8hlIR);
+					MemValue.insert(make_pair(_memAddr + 2, tempVecMemAddr2));
+				}
+				else
+					reg8hlIR = new IR(IR::OPR::OPR_EXTRACT8HL, _toSaveValue);
+
+				MemValue[_memAddr + 2].push_back(reg8hlIR);
+				irList.push_back(reg8hlIR);
+
+				if (MemValue.find(_memAddr + 1) != MemValue.end())
+				{
+					reg8hIR = new IR(IR::OPR::OPR_EXTRACT8H, _toSaveValue);
+					vector<Value*> tempVecMemAddr1;
+					tempVecMemAddr1.push_back(reg8hIR);
+					MemValue.insert(make_pair(_memAddr + 1, tempVecMemAddr1));
+				}
+				else
+					reg8hIR = new IR(IR::OPR::OPR_EXTRACT8H, _toSaveValue);
+
+				MemValue[_memAddr + 1].push_back(reg8hIR);
+				irList.push_back(reg8hIR);
+
+				if (MemValue.find(_memAddr) != MemValue.end())
+				{
+					reg8lIR = new IR(IR::OPR::OPR_EXTRACT8L, _toSaveValue);
+					vector<Value*> tempVecMemAddr;
+					tempVecMemAddr.push_back(reg8lIR);
+					MemValue.insert(make_pair(_memAddr, tempVecMemAddr));
+				}
+				else
+					reg8lIR = new IR(IR::OPR::OPR_EXTRACT8L, _toSaveValue);
+				MemValue[_memAddr].push_back(reg8lIR);
+				irList.push_back(reg8lIR);
+			}
+		}
+
+		// EA 가 상수가 아닌 경우 (EA가 알 수 없는 경우)
+		// Store EA, Value
+
+		{
+			// rstIR0 = Load BaseValue
+			//rstIR = CraeteStoreIR(BaseValue, _toSaveValue, IR::OPR_STORE);
+			//rstIR->isHiddenRHS = true;
+			//irList.push_back(rstIR);
+		}
+	}
+
 	return;
 }
 
@@ -1834,26 +1884,29 @@ Value* GetImmValue(ZydisDecodedOperand* _decodedOperandPtr, vector<IR*>& irList)
 Value* GetImmValue(DWORD _immValue, BYTE _size, vector<IR*>& irList)
 {
 	IR* immValue;
-	if (_size == 32)
-	{
-		immValue = CraeteBVVIR(_immValue, 32);
-		irList.push_back(immValue);
-		return immValue;
-	}
+	immValue = CraeteBVVIR(_immValue, _size);
+	return immValue;
 
-	if (_size == 16)
-	{
-		immValue = CraeteBVVIR(_immValue, 16);
-		irList.push_back(immValue);
-		return immValue;
-	}
+	//if (_size == 32)
+	//{
+	//	immValue = CraeteBVVIR(_immValue, _size);
+	//	irList.push_back(immValue);
+	//	return immValue;
+	//}
 
-	if (_size == 8)
-	{
-		immValue = CraeteBVVIR(_immValue, 8);
-		irList.push_back(immValue);
-		return immValue;
-	}
+	//if (_size == 16)
+	//{
+	//	immValue = CraeteBVVIR(_immValue, 16);
+	//	irList.push_back(immValue);
+	//	return immValue;
+	//}
+
+	//if (_size == 8)
+	//{
+	//	immValue = CraeteBVVIR(_immValue, 8);
+	//	irList.push_back(immValue);
+	//	return immValue;
+	//}
 }
 
 Value* GetOperand(ZydisDecodedInstruction* _decodedInstPtr, ZydisDecodedOperand* _decodedOperandPtr, REGDUMP& _regdump, vector<IR*>& irList)
@@ -1957,7 +2010,8 @@ int CreateIR(ZydisDecodedInstruction* ptr_di, ZydisDecodedOperand* operandPTr, R
 
 		// EFLAG 관련 IR 추가
 
-		SaveRegisterValue(operandPTr[0].reg.value, rst, operandPTr[0].size, irList); // x86 오퍼랜드를 Set하는 IR을 생성한다.
+		SetOperand(ptr_di, &operandPTr[0], rst, _regdump, irList);
+		//SaveRegisterValue(operandPTr[0].reg.value, rst, operandPTr[0].size, irList); // x86 오퍼랜드를 Set하는 IR을 생성한다.
 		IRList.insert(make_pair(_offset, irList));
 		return 1;
 		break;
@@ -2038,6 +2092,31 @@ int CreateIR(ZydisDecodedInstruction* ptr_di, ZydisDecodedOperand* operandPTr, R
 	case ZYDIS_MNEMONIC_SBB:
 		break;
 	case ZYDIS_MNEMONIC_AND:
+		Op1 = GetOperand(ptr_di, &operandPTr[0], _regdump, irList); // x86 오퍼랜드를 Get하는 IR을 생성한다.
+
+		if (ptr_di->opcode == 0x83)
+			operandPTr[1].size = operandPTr[0].size;
+
+		Op2 = GetOperand(ptr_di, &operandPTr[1], _regdump, irList);// x86 오퍼랜드를 Get하는 IR을 생성한다.
+
+		// 두 개의 오퍼랜드는 동일해야 한다.
+		if (Op1->Size != Op2->Size)
+		{
+			_plugin_logprintf("GenerateOPR_AND Error (Operand is not matched)\n");
+			return 0;
+		}
+		// Constant Folding 가능한 경우 CreateBinaryIR를 호출하지 않고 Imm Value 생성
+
+		// Constant Folding 가능 조건이 아닌 경우 IR 생성
+		rst = CraeteBinaryIR(Op1, Op2, IR::OPR::OPR_AND);
+		irList.push_back(rst);
+
+		// EFLAG 관련 IR 추가
+
+		SetOperand(ptr_di, &operandPTr[0], rst, _regdump, irList);
+		//SaveRegisterValue(operandPTr[0].reg.value, rst, operandPTr[0].size, irList); // x86 오퍼랜드를 Set하는 IR을 생성한다.
+		IRList.insert(make_pair(_offset, irList));
+		return 1;
 		break;
 	case ZYDIS_MNEMONIC_DAA:
 		break;
@@ -2611,6 +2690,9 @@ void printIR(IR* _irPtr)
 		break;
 	case IR::OPR::OPR_SUB:
 		_plugin_logprintf("%s = OPR_SUB %s %s\n", _irPtr->Name.c_str(), _irPtr->Operands[0]->valuePtr->Name.c_str(), _irPtr->Operands[1]->valuePtr->Name.c_str());
+		break;
+	case IR::OPR::OPR_AND:
+		_plugin_logprintf("%s = OPR_AND %s %s\n", _irPtr->Name.c_str(), _irPtr->Operands[0]->valuePtr->Name.c_str(), _irPtr->Operands[1]->valuePtr->Name.c_str());
 		break;
 	case IR::OPR::OPR_XOR:
 		_plugin_logprintf("%s = OPR_XOR %s %s\n", _irPtr->Name.c_str(), _irPtr->Operands[0]->valuePtr->Name.c_str(), _irPtr->Operands[1]->valuePtr->Name.c_str());
