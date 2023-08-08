@@ -115,9 +115,14 @@ public:
 		OPR_XOR,
 		OPR_BT,
 		OPR_BTC,
+		OPR_BSF,
 		OPR_RCL,
+		OPR_RCR,
 		OPR_ROL,
+		OPR_ROR,
 		OPR_SAR,
+		OPR_SHL,
+		OPR_SHR,
 	};
 	OPR opr;
 	vector<OPERAND*> Operands;
@@ -234,7 +239,7 @@ public:
 		std::shared_ptr<BTreeNode>  ptr3 = std::make_shared<BTreeNode>(MakeBTreeNode(op3->Name));
 		MakeThirdSubTree(ast, op3->ast);
 	}
-#define DEBUG
+//#define DEBUG
 	IR(OPR _opr, Value* op1, Value* op2, Value* op3, Value* op4)
 	{
 		opr = _opr;

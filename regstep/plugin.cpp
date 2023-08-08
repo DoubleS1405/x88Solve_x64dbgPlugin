@@ -21,6 +21,8 @@ map<DWORD, vector<IR*>> IRList;
 z3::context* z3Context;
 z3::expr* z3Equation;
 
+DWORD cntd = 0;
+
 enum
 {
 	MENU_ENABLED,
@@ -582,7 +584,8 @@ PLUG_EXPORT void CBTRACEEXECUTE(CBTYPE cbType, PLUG_CB_TRACEEXECUTE* info)
 	BYTE buf[64];
 	DWORD stackData;
 	DWORD memOperandAddr;
-	_plugin_logprintf("[%p] test\n", info->cip);
+
+	//_plugin_logprintf("[%p] test\n", info->cip);
 
 	if (info->cip < StartAddress || info->cip > EndAddress)
 	{		
@@ -613,8 +616,9 @@ PLUG_EXPORT void CBTRACEEXECUTE(CBTYPE cbType, PLUG_CB_TRACEEXECUTE* info)
 	ZydisDecoderDecodeFull(&Decoder, buf, 15, &DecodedInst, DecodedOperand,
 		ZYDIS_MAX_OPERAND_COUNT_VISIBLE, ZYDIS_DFLAG_VISIBLE_OPERANDS_ONLY);
 
-	CreateIR(&DecodedInst, DecodedOperand, regdump, info->cip);
-	_plugin_logprintf("Create IR :%p\n", info->cip);
+	CreateIR(&DecodedInst, DecodedOperand, regdump, cntd/*info->cip*/);
+	//_plugin_logprintf("Create IR :%p\n", info->cip);
+	cntd++;
 
 }
 
@@ -1169,20 +1173,29 @@ PLUG_EXPORT void CBTRACEEXECUTE(CBTYPE cbType, PLUG_CB_TRACEEXECUTE* info)
 
 PLUG_EXPORT void CBBREAKPOINT(CBTYPE cbType, PLUG_CB_BREAKPOINT* info)
 {
+	_plugin_logprintf("CBBREAKPOINT\n");
 	if (IRList.size() == 0)
+	{
+		_plugin_logprintf("IRList.size() == 0 \n");
 		return;
-
+	}
+		
+	_plugin_logprintf("IRList.size() %d \n", IRList.size());
 	for (auto it1 : IRList)
 	{
 		_plugin_logprintf("--------------------------------\n");
 		for (auto it : it1.second)
 		{
 			if(it == nullptr)
-				_plugin_logprintf("[%p] it is null\n");
+				_plugin_logprintf("[%p] it is null\n", it1.first);
 			else
 			{
 				_plugin_logprintf("[%p]", it1.first);
 				printIR(it);
+				if (it->UseList.size() == 0)
+				{
+					_plugin_logprintf("[%p] Dead Store\n", it1.first);
+				}
 			}
 		}
 		_plugin_logprintf("--------------------------------\n");
