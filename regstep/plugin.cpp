@@ -16,7 +16,8 @@ map<string, z3::expr*> symbolExprMap;
 vector<Value*> StatusFlagsValue[5];
 vector<Value*> RegValue[ZYDIS_REGISTER_MAX_VALUE];
 map<DWORD, vector<Value*>> MemValue;
-map<DWORD, vector<IR*>> IRList;
+multimap<DWORD, vector<IR*>> IRList;
+set<DWORD> taintList;
 
 z3::context* z3Context;
 z3::expr* z3Equation;
@@ -616,7 +617,7 @@ PLUG_EXPORT void CBTRACEEXECUTE(CBTYPE cbType, PLUG_CB_TRACEEXECUTE* info)
 	ZydisDecoderDecodeFull(&Decoder, buf, 15, &DecodedInst, DecodedOperand,
 		ZYDIS_MAX_OPERAND_COUNT_VISIBLE, ZYDIS_DFLAG_VISIBLE_OPERANDS_ONLY);
 
-	CreateIR(&DecodedInst, DecodedOperand, regdump, cntd/*info->cip*/);
+	CreateIR(&DecodedInst, DecodedOperand, regdump, info->cip);
 	//_plugin_logprintf("Create IR :%p\n", info->cip);
 	cntd++;
 
@@ -1196,9 +1197,20 @@ PLUG_EXPORT void CBBREAKPOINT(CBTYPE cbType, PLUG_CB_BREAKPOINT* info)
 				{
 					_plugin_logprintf("[%p] Dead Store\n", it1.first);
 				}
+
+				if (it->isTainted)
+				{
+					//_plugin_logprintf("[%p]Tainted\n", it1.first);
+					taintList.insert(it1.first);
+				}
 			}
 		}
 		_plugin_logprintf("--------------------------------\n");
+	}
+
+	for (auto taintIt : taintList)
+	{
+		_plugin_logprintf("Tainted %p\n", taintIt);
 	}
 
 	//for (auto it1 : IRList)
@@ -1276,17 +1288,20 @@ PLUG_EXPORT void CBCREATEPROCESS(CBTYPE ctype, PLUG_CB_CREATEPROCESS* info)
 	z3Equation = new z3::expr(*z3eax);
 	symbolExprMap["EAX(0)"] = z3eax;
 
-	IR* reg16hIR = new IR("EAX16H", RegValue[REG_EAX_16H].size(), IR::OPR::OPR_EXTRACT16H, eaxValue);
+	IR* reg16hIR = new IR("ESI16H", RegValue[REG_ESI_16H].size(), IR::OPR::OPR_EXTRACT16H, eaxValue);
 	reg16hIR->Size = 16;
-	RegValue[REG_EAX_16H].push_back(reg16hIR);
+	reg16hIR->isTainted = true;
+	RegValue[REG_ESI_16H].push_back(reg16hIR);
 
-	IR* regEax8hIR = new IR("EAX8H", RegValue[REG_EAX_8H].size(), IR::OPR::OPR_EXTRACT8H, eaxValue);
+	IR* regEax8hIR = new IR("ESI8H", RegValue[REG_ESI_8H].size(), IR::OPR::OPR_EXTRACT8H, eaxValue);
 	regEax8hIR->Size = 8;
-	RegValue[REG_EAX_8H].push_back(regEax8hIR);
+	regEax8hIR->isTainted = true;
+	RegValue[REG_ESI_8H].push_back(regEax8hIR);
 
-	IR* regEax8lIR = new IR("EAX8L", RegValue[REG_EAX_8L].size(), IR::OPR::OPR_EXTRACT8L, eaxValue);
+	IR* regEax8lIR = new IR("ESI8L", RegValue[REG_ESI_8L].size(), IR::OPR::OPR_EXTRACT8L, eaxValue);
 	regEax8lIR->Size = 8;
-	RegValue[REG_EAX_8L].push_back(regEax8lIR);
+	regEax8lIR->isTainted = true;
+	RegValue[REG_ESI_8L].push_back(regEax8lIR);
 	_plugin_logprintf("%s StartAddress:%p, EndAddress:%p\n", modInfo.name, StartAddress, EndAddress);
 
 	Value* espValue = new Value("ESP", 0);

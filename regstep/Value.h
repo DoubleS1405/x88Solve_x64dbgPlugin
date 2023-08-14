@@ -77,6 +77,8 @@ public:
 
 	Value(string ValName, DWORD idx);
 
+	Value(string ValName, DWORD idx, BOOL _isTainted);
+
 	virtual void test() {};
 
 };
@@ -108,14 +110,17 @@ public:
 		OPR_STORE,
 		OPR_LOAD,
 		OPR_ADD,
+		OPR_ADC,
 		OPR_SUB,
 		OPR_MUL,
 		OPR_AND,
 		OPR_OR,
 		OPR_XOR,
+		OPR_NOT,
 		OPR_BT,
 		OPR_BTC,
 		OPR_BSF,
+		OPR_BSWAP,
 		OPR_RCL,
 		OPR_RCR,
 		OPR_ROL,
@@ -146,6 +151,11 @@ public:
 		opr = _opr;
 		AddOperand(op1);
 
+		if (op1->isTainted)
+		{
+			isTainted = true;
+		}
+
 		ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
 		ast->m_NodeType = NT_OPERATOR;
 
@@ -153,7 +163,7 @@ public:
 		MakeLeftSubTree(ast, op1->ast);
 	}
 
-	IR(string ValName, DWORD index, OPR _opr, Value* op1) :Value(ValName, index)
+	IR(string ValName, DWORD index, OPR _opr, Value* op1) :Value(ValName, index, op1->isTainted)
 	{
 		opr = _opr;
 		AddOperand(op1);
@@ -175,6 +185,11 @@ public:
 		AddOperand(op1);
 		AddOperand(op2);
 
+		if (op1->isTainted || op2->isTainted)
+		{
+			isTainted = true;
+		}
+
 		ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
 		ast->m_NodeType = NT_OPERATOR;
 
@@ -192,6 +207,11 @@ public:
 		AddOperand(op1);
 		AddOperand(op2);
 
+		if (op1->isTainted || op2->isTainted)
+		{
+			isTainted = true;
+		}
+
 		ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
 		ast->m_NodeType = NT_OPERATOR;
 
@@ -207,6 +227,11 @@ public:
 		opr = _opr;
 		AddOperand(op1);
 		AddOperand(op2);
+
+		if (op1->isTainted || op2->isTainted)
+		{
+			isTainted = true;
+		}
 
 		ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
 		ast->m_NodeType = NT_OPERATOR;
@@ -226,6 +251,11 @@ public:
 		AddOperand(op1);
 		AddOperand(op2);
 		AddOperand(op3);
+
+		if (op1->isTainted || op2->isTainted || op3->isTainted)
+		{
+			isTainted = true;
+		}
 
 		ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
 		ast->m_NodeType = NT_OPERATOR;
@@ -247,6 +277,11 @@ public:
 		AddOperand(op2);
 		AddOperand(op3);
 		AddOperand(op4);
+
+		if (op1->isTainted || op2->isTainted || op3->isTainted || op4->isTainted)
+		{
+			isTainted = true;
+		}
 
 		ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
 		ast->m_NodeType = NT_OPERATOR;
@@ -305,6 +340,8 @@ public:
 };
 
 IR* CraeteLoadIR(Value* op1, IR::OPR _opr);
+
+IR* CraeteUnaryIR(Value* op1, IR::OPR _opr);
 
 IR* CraeteBinaryIR(Value* op1, Value* op2, IR::OPR _opr);
 
