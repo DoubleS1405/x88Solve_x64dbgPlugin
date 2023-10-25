@@ -43,6 +43,403 @@ Value::Value(string ValName, DWORD idx, BOOL _isTainted)
 	//printf("Value Name :%s\n", Name.c_str());
 }
 
+IR::IR(OPR _opr, Value* op1)
+{
+	opr = _opr;
+	AddOperand(op1);
+
+	if (op1->isTainted)
+	{
+		isTainted = true;
+	}
+
+	if (op1->OperandType == OPERANDTYPE_CONSTANT)
+	{
+		//_plugin_logprintf("[%p] Constant Folding 1\n", cntd);
+	}
+
+	if (_opr == OPR_EXTRACT16H && dynamic_cast<IR*>(op1))
+	{
+		if (dynamic_cast<IR*>(op1)->opr == OPR_CONCAT)
+		{
+			_plugin_logprintf("[%p] Concat 1 Optimized\n", cntd);
+		}
+	}
+
+	ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
+	ast->m_NodeType = NT_OPERATOR;
+	ast->childrenCount = op1->ast->childrenCount + 1;
+
+	std::shared_ptr<BTreeNode> ptr1 = std::make_shared<BTreeNode>(MakeBTreeNode(op1->Name));
+	MakeLeftSubTree(ast, op1->ast);
+}
+
+IR::IR(string ValName, DWORD index, OPR _opr, Value* op1) :Value(ValName, index, op1->isTainted)
+{
+	opr = _opr;
+	AddOperand(op1);
+
+	if (op1->isTainted)
+	{
+		isTainted = true;
+	}
+
+	if (op1->OperandType == OPERANDTYPE_CONSTANT)
+	{
+		//_plugin_logprintf("[%p] Constant Folding 1\n", cntd);
+	}
+
+	if (_opr == OPR_EXTRACT16H && dynamic_cast<IR*>(op1))
+	{
+		if (dynamic_cast<IR*>(op1)->opr == OPR_CONCAT)
+		{
+			if (dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr))
+			{
+				if (dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr)->opr == OPR_EXTRACT16H)
+				{
+					ast = dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr)->Operands[0]->valuePtr->ast;
+					ast->childrenCount = dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr)->Operands[0]->valuePtr->ast->childrenCount;
+					//_plugin_logprintf("[%p] Concat 1 OPR_EXTRACT16H Optimized\n", cntd);
+					return;
+				}
+			}
+		}
+	}
+
+	if (_opr == OPR_EXTRACT8H && dynamic_cast<IR*>(op1))
+	{
+		if ((dynamic_cast<IR*>(op1)->Operands.size() >1) &&dynamic_cast<IR*>(op1)->opr == OPR_CONCAT)
+		{
+			if (dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[1]->valuePtr))
+			{
+				if (dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[1]->valuePtr)->opr == OPR_EXTRACT8H)
+				{
+					ast = dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[1]->valuePtr)->Operands[0]->valuePtr->ast;
+					ast->childrenCount = dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[1]->valuePtr)->Operands[0]->valuePtr->ast->childrenCount;
+					//_plugin_logprintf("[%p] Concat 1 OPR_EXTRACT8H Optimized\n", cntd);
+					return;
+				}
+			}
+		}
+	}
+
+	if (_opr == OPR_EXTRACT8L && dynamic_cast<IR*>(op1))
+	{
+		if ((dynamic_cast<IR*>(op1)->Operands.size() > 2) && dynamic_cast<IR*>(op1)->opr == OPR_CONCAT)
+		{
+			if (dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[2]->valuePtr))
+			{
+				if (dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[2]->valuePtr)->opr == OPR_EXTRACT8L)
+				{
+					ast = dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[2]->valuePtr)->Operands[0]->valuePtr->ast;
+					ast->childrenCount = dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[2]->valuePtr)->Operands[0]->valuePtr->ast->childrenCount;
+					//_plugin_logprintf("[%p] Concat 1 OPR_EXTRACT8L Optimized\n", cntd);
+					return;
+				}
+			}
+		}
+	}
+
+	ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
+	ast->m_NodeType = NT_OPERATOR;
+	ast->childrenCount = op1->ast->childrenCount + 1;
+
+	std::shared_ptr<BTreeNode> ptr1 = std::make_shared<BTreeNode>(MakeBTreeNode(op1->Name));
+	MakeLeftSubTree(ast, op1->ast);
+}
+
+IR::IR(OPR _opr, Value* op1, Value* op2)
+{
+	if (op1->Size != op2->Size)
+	{
+		printf("[IR] Operand size is mismatching\n");
+	}
+	opr = _opr;
+	AddOperand(op1);
+	AddOperand(op2);
+
+	if (op1->isTainted || op2->isTainted)
+	{
+		isTainted = true;
+	}
+
+	if (op1->OperandType == OPERANDTYPE_CONSTANT && op2->OperandType == IR::OPERANDTYPE_CONSTANT)
+	{
+		//_plugin_logprintf("[%p] Constant Folding 2\n", cntd);
+	}
+
+	if (_opr == OPR_CONCAT && dynamic_cast<IR*>(op1))
+	{
+		Value* val1 = nullptr;
+		Value* val2 = nullptr;
+
+		if (dynamic_cast<IR*>(op1)->opr == OPR_EXTRACT8H)
+		{
+			val1 = dynamic_cast<IR*>(op1)->Operands[0]->valuePtr;
+			if (dynamic_cast<IR*>(op2))
+			{
+				if (dynamic_cast<IR*>(op2)->opr == OPR_EXTRACT8L)
+				{
+					val2 = dynamic_cast<IR*>(op2)->Operands[0]->valuePtr;
+					if ((val1 == val2))
+					{
+						ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
+						ast->m_NodeType = NT_OPERATOR;
+						ast->childrenCount = val1->ast->childrenCount + 1;
+						MakeLeftSubTree(ast, op1->ast);
+					}
+				}
+			}
+		}
+	}
+
+	ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
+	ast->m_NodeType = NT_OPERATOR;
+	ast->childrenCount = op1->ast->childrenCount + op2->ast->childrenCount + 2;
+
+	std::shared_ptr<BTreeNode> ptr1 = std::make_shared<BTreeNode>(MakeBTreeNode(op1->Name));
+	MakeLeftSubTree(ast, op1->ast);
+
+	std::shared_ptr<BTreeNode>  ptr2 = std::make_shared<BTreeNode>(MakeBTreeNode(op2->Name));
+	MakeRightSubTree(ast, op2->ast);
+}
+
+IR::IR(OPR _opr, Value* op1, Value* op2, BYTE size)
+{
+	opr = _opr;
+	Size = size;
+	AddOperand(op1);
+	AddOperand(op2);
+
+	if (op1->isTainted || op2->isTainted)
+	{
+		isTainted = true;
+	}
+
+	if (op1->OperandType == OPERANDTYPE_CONSTANT && op2->OperandType == IR::OPERANDTYPE_CONSTANT)
+	{
+		//_plugin_logprintf("[%p] Constant Folding 2\n", cntd);
+	}
+
+	if (_opr == OPR_CONCAT && dynamic_cast<IR*>(op1))
+	{
+		Value* val1 = nullptr;
+		Value* val2 = nullptr;
+
+		if (dynamic_cast<IR*>(op1)->opr == OPR_EXTRACT8H)
+		{
+			val1 = dynamic_cast<IR*>(op1)->Operands[0]->valuePtr;
+			if (dynamic_cast<IR*>(op2))
+			{
+				if (dynamic_cast<IR*>(op2)->opr == OPR_EXTRACT8L)
+				{
+					val2 = dynamic_cast<IR*>(op2)->Operands[0]->valuePtr;
+					if ((val1 == val2))
+					{
+						ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
+						ast->m_NodeType = NT_OPERATOR;
+						ast->childrenCount = val1->ast->childrenCount +1;
+						MakeLeftSubTree(ast, op1->ast);
+						return;
+					}
+				}
+			}
+		}
+	}
+
+	ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
+	ast->m_NodeType = NT_OPERATOR;
+	ast->childrenCount = op1->ast->childrenCount + op2->ast->childrenCount + 2;
+
+	std::shared_ptr<BTreeNode> ptr1 = std::make_shared<BTreeNode>(MakeBTreeNode(op1->Name));
+	MakeLeftSubTree(ast, op1->ast);
+
+	std::shared_ptr<BTreeNode>  ptr2 = std::make_shared<BTreeNode>(MakeBTreeNode(op2->Name));
+	MakeRightSubTree(ast, op2->ast);
+}
+
+IR::IR(string ValName, DWORD index, OPR _opr, Value* op1, Value* op2)
+{
+	opr = _opr;
+	AddOperand(op1);
+	AddOperand(op2);
+
+	if (op1->isTainted || op2->isTainted)
+	{
+		isTainted = true;
+	}
+
+	if (op1->OperandType == OPERANDTYPE_CONSTANT && op2->OperandType == IR::OPERANDTYPE_CONSTANT)
+	{
+		//_plugin_logprintf("[%p] Constant Folding 2\n", cntd);
+	}
+
+	ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
+	ast->m_NodeType = NT_OPERATOR;
+	ast->childrenCount = op1->ast->childrenCount + op2->ast->childrenCount + 2;
+
+	std::shared_ptr<BTreeNode> ptr1 = std::make_shared<BTreeNode>(MakeBTreeNode(op1->Name));
+	MakeLeftSubTree(ast, op1->ast);
+
+	std::shared_ptr<BTreeNode>  ptr2 = std::make_shared<BTreeNode>(MakeBTreeNode(op2->Name));
+	MakeRightSubTree(ast, op2->ast);
+
+	Value(ValName, index);
+}
+
+IR::IR(OPR _opr, Value* op1, Value* op2, Value* op3)
+{
+	opr = _opr;
+	AddOperand(op1);
+	AddOperand(op2);
+	AddOperand(op3);
+
+	if (op1->isTainted || op2->isTainted || op3->isTainted)
+	{
+		isTainted = true;
+	}
+
+	if (op1->OperandType == OPERANDTYPE_CONSTANT && op2->OperandType == IR::OPERANDTYPE_CONSTANT && op3->OperandType == IR::OPERANDTYPE_CONSTANT)
+	{
+		_plugin_logprintf("[%p] Constant Folding 3\n", cntd);
+	}
+
+	if (_opr==OPR_CONCAT && dynamic_cast<IR*>(op1))
+	{
+		Value* val1=nullptr;
+		Value* val2=nullptr;
+		Value* val3=nullptr;
+
+		if (dynamic_cast<IR*>(op1)->opr == OPR_EXTRACT16H)
+		{
+			val1 = dynamic_cast<IR*>(op1)->Operands[0]->valuePtr;
+			if (dynamic_cast<IR*>(op2))
+			{
+				if (dynamic_cast<IR*>(op2)->opr == OPR_EXTRACT8H)
+				{
+					val2 = dynamic_cast<IR*>(op2)->Operands[0]->valuePtr;
+					if (dynamic_cast<IR*>(op3))
+					{
+						if (dynamic_cast<IR*>(op3)->opr == OPR_EXTRACT8L)
+						{
+							val3 = dynamic_cast<IR*>(op3)->Operands[0]->valuePtr;
+							if ((val1 == val2) && (val2 == val3))
+							{
+								ast = val1->ast;
+								ast->childrenCount = val1->ast->childrenCount;
+								_plugin_logprintf("[%p] Concat 3 Optimized\n", cntd);
+								return;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
+	ast->m_NodeType = NT_OPERATOR;
+	ast->childrenCount = op1->ast->childrenCount + op2->ast->childrenCount + op3->ast->childrenCount + 3;
+
+	std::shared_ptr<BTreeNode> ptr1 = std::make_shared<BTreeNode>(MakeBTreeNode(op1->Name));
+	MakeLeftSubTree(ast, op1->ast);
+
+	std::shared_ptr<BTreeNode>  ptr2 = std::make_shared<BTreeNode>(MakeBTreeNode(op2->Name));
+	MakeRightSubTree(ast, op2->ast);
+
+	std::shared_ptr<BTreeNode>  ptr3 = std::make_shared<BTreeNode>(MakeBTreeNode(op3->Name));
+	MakeThirdSubTree(ast, op3->ast);
+}
+
+IR::IR(OPR _opr, Value* op1, Value* op2, Value* op3, Value* op4)
+{
+	opr = _opr;
+	AddOperand(op1);
+	AddOperand(op2);
+	AddOperand(op3);
+	AddOperand(op4);
+
+	if (op1->isTainted || op2->isTainted || op3->isTainted || op4->isTainted)
+	{
+		isTainted = true;
+	}
+
+	if (op1->OperandType == OPERANDTYPE_CONSTANT && op2->OperandType == IR::OPERANDTYPE_CONSTANT && op3->OperandType == IR::OPERANDTYPE_CONSTANT && op4->OperandType == IR::OPERANDTYPE_CONSTANT)
+	{
+		_plugin_logprintf("[%p] Constant Folding 4\n", cntd);
+	}
+
+	if (_opr == OPR_CONCAT && dynamic_cast<IR*>(op1))
+	{
+		Value* val1 = nullptr;
+		Value* val2 = nullptr;
+		Value* val3 = nullptr;
+		Value* val4 = nullptr;
+
+		printIR(dynamic_cast<IR*>(op1));
+
+		if (dynamic_cast<IR*>(op1)->opr == OPR_EXTRACT8HH)
+		{
+			val1 = dynamic_cast<IR*>(op1)->Operands[0]->valuePtr;
+			if (dynamic_cast<IR*>(op2))
+			{
+				if (dynamic_cast<IR*>(op2)->opr == OPR_EXTRACT8HL)
+				{
+					val2 = dynamic_cast<IR*>(op2)->Operands[0]->valuePtr;
+					if (dynamic_cast<IR*>(op3))
+					{
+						if (dynamic_cast<IR*>(op3)->opr == OPR_EXTRACT8H)
+						{
+							val3 = dynamic_cast<IR*>(op3)->Operands[0]->valuePtr;
+							if (dynamic_cast<IR*>(op4))
+							{
+								if (dynamic_cast<IR*>(op4)->opr == OPR_EXTRACT8L)
+								{									
+									val4 = dynamic_cast<IR*>(op4)->Operands[0]->valuePtr;
+									if ((val1 == val2) && (val2 == val3) && (val2 == val4))
+									{
+										ast = val1->ast;
+										ast->childrenCount = op1->ast->childrenCount;
+										_plugin_logprintf("Concat 4 Optimized\n");
+										return;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
+	ast->m_NodeType = NT_OPERATOR;
+	ast->childrenCount = op1->ast->childrenCount + op2->ast->childrenCount + op3->ast->childrenCount + op4->ast->childrenCount + 4;
+
+	std::shared_ptr<BTreeNode> ptr1 = std::make_shared<BTreeNode>(MakeBTreeNode(op1->Name));
+	MakeLeftSubTree(ast, op1->ast);
+
+	std::shared_ptr<BTreeNode>  ptr2 = std::make_shared<BTreeNode>(MakeBTreeNode(op2->Name));
+	MakeRightSubTree(ast, op2->ast);
+#ifdef DEBUG
+	MessageBoxA(0, "Op2", "Op2", 0);
+#endif
+
+
+	std::shared_ptr<BTreeNode>  ptr3 = std::make_shared<BTreeNode>(MakeBTreeNode(op3->Name));
+	MakeThirdSubTree(ast, op3->ast);
+
+#ifdef DEBUG
+	MessageBoxA(0, "Op3", "Op3", 0);
+#endif
+
+	std::shared_ptr<BTreeNode>  ptr4 = std::make_shared<BTreeNode>(MakeBTreeNode(op4->Name));
+	MakeFourthSubTree(ast, op4->ast);
+
+#ifdef DEBUG
+	MessageBoxA(0, "Op4", "Op4", 0);
+#endif
+}
 
 IR* CraeteBVVIR(DWORD intVal, BYTE size)
 {
@@ -59,6 +456,7 @@ IR* CraeteBVVIR(DWORD intVal, BYTE size)
 	op2->ast->valPtr = op2;
 
 	IR* testAddIR = new IR(IR::OPR_BVV, op1, op2, size);
+	testAddIR->OperandType = IR::OPERANDTYPE_CONSTANT;
 	testAddIR->Size = size;
 	testAddIR->ast->m_NodeType = NT_OPERATOR;
 	//testAddIR->isHiddenRHS = true;
@@ -72,7 +470,39 @@ IR* CraeteLoadIR(Value* op1, IR::OPR _opr)
 	return testAddIR;
 }
 
-IR* CraeteUnaryIR(Value* op1,IR::OPR _opr)
+IR* CraeteZeroExtendIR(Value* _val, BYTE size, vector<IR*>& irList)
+{
+	IR* op1 = CraeteBVVIR(size,8);
+	//op1->Size = size;
+	//op1->ast = std::make_shared<BTreeNode>(MakeBTreeNode(op1->printOpr(IR::OPR_BVV)));
+	//op1->ast->m_NodeType = NT_OPERATOR;
+	//op1->ast->valPtr = op1;
+	irList.push_back(op1);
+
+	IR* testAddIR = new IR(IR::OPR_ZEXT, op1, _val, size);
+	testAddIR->Size = size;
+	testAddIR->ast->m_NodeType = NT_OPERATOR;
+	//testAddIR->isHiddenRHS = true;
+	return testAddIR;
+}
+
+IR* CraeteSignExtendIR(Value* _val, BYTE size, vector<IR*>& irList)
+{
+	IR* op1 = CraeteBVVIR(size, 8);
+	//op1->Size = size;
+	//op1->ast = std::make_shared<BTreeNode>(MakeBTreeNode(op1->printOpr(IR::OPR_BVV)));
+	//op1->ast->m_NodeType = NT_OPERATOR;
+	//op1->ast->valPtr = op1;
+	irList.push_back(op1);
+
+	IR* testAddIR = new IR(IR::OPR_SEXT, op1, _val, size);
+	testAddIR->Size = size;
+	testAddIR->ast->m_NodeType = NT_OPERATOR;
+	//testAddIR->isHiddenRHS = true;
+	return testAddIR;
+}
+
+IR* CraeteUnaryIR(Value* op1, IR::OPR _opr)
 {
 	IR* testAddIR = new IR(_opr, op1);
 	if (op1->isTainted)
@@ -539,6 +969,29 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 			dynamic_cast<IR*>(op2) &&
 			dynamic_cast<IR*>(op3))
 		{
+			if (dynamic_cast<IR*>(op1)->opr == IR::OPR::OPR_EXTRACT16H &&
+				dynamic_cast<IR*>(op2)->opr == IR::OPR::OPR_EXTRACT8H &&
+				dynamic_cast<IR*>(op3)->opr == IR::OPR::OPR_EXTRACT8L)
+			{
+				if (dynamic_cast<IR*>(op1)->Operands[0]->valuePtr == dynamic_cast<IR*>(op2)->Operands[0]->valuePtr)
+				{
+					if (dynamic_cast<IR*>(op2)->Operands[0]->valuePtr == dynamic_cast<IR*>(op3)->Operands[0]->valuePtr)
+					{
+						if (dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr))
+						{
+							irList.push_back(dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr));
+							return dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr);
+						}
+					}
+				}
+			}
+		}
+
+
+		if (dynamic_cast<IR*>(op1) &&
+			dynamic_cast<IR*>(op2) &&
+			dynamic_cast<IR*>(op3))
+		{
 			if (dynamic_cast<IR*>(op1)->opr == IR::OPR::OPR_BVV &&
 				dynamic_cast<IR*>(op2)->opr == IR::OPR::OPR_BVV &&
 				dynamic_cast<IR*>(op3)->opr == IR::OPR::OPR_BVV)
@@ -554,10 +1007,6 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 			}
 
 		}
-
-		// Todo op1, op2, op3이 OPC_EXTRACT
-		// OptimizeConcat(IR* concatIRPtr)
-
 		rstIR = new IR(IR::OPR::OPR_CONCAT, op1, op2, op3);
 		rstIR->Size = 32;
 		rstIR->OperandType = rstIR->OPERANDTYPE_REGISTER;
@@ -595,6 +1044,28 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 			irList.push_back(rstIR);
 		}
 		op3 = (RegValue[REG_EBX_8L].back());
+
+		if (dynamic_cast<IR*>(op1) &&
+			dynamic_cast<IR*>(op2) &&
+			dynamic_cast<IR*>(op3))
+		{
+			if (dynamic_cast<IR*>(op1)->opr == IR::OPR::OPR_EXTRACT16H &&
+				dynamic_cast<IR*>(op2)->opr == IR::OPR::OPR_EXTRACT8H &&
+				dynamic_cast<IR*>(op3)->opr == IR::OPR::OPR_EXTRACT8L)
+			{
+				if (dynamic_cast<IR*>(op1)->Operands[0]->valuePtr == dynamic_cast<IR*>(op2)->Operands[0]->valuePtr)
+				{
+					if (dynamic_cast<IR*>(op2)->Operands[0]->valuePtr == dynamic_cast<IR*>(op3)->Operands[0]->valuePtr)
+					{
+						if (dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr))
+						{
+							irList.push_back(dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr));
+							return dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr);
+						}
+					}
+				}
+			}
+		}
 
 		if (dynamic_cast<IR*>(op1) &&
 			dynamic_cast<IR*>(op2) &&
@@ -652,6 +1123,28 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 			irList.push_back(rstIR);
 		}
 		op3 = (RegValue[REG_ECX_8L].back());
+
+		if (dynamic_cast<IR*>(op1) &&
+			dynamic_cast<IR*>(op2) &&
+			dynamic_cast<IR*>(op3))
+		{
+			if (dynamic_cast<IR*>(op1)->opr == IR::OPR::OPR_EXTRACT16H &&
+				dynamic_cast<IR*>(op2)->opr == IR::OPR::OPR_EXTRACT8H &&
+				dynamic_cast<IR*>(op3)->opr == IR::OPR::OPR_EXTRACT8L)
+			{
+				if (dynamic_cast<IR*>(op1)->Operands[0]->valuePtr == dynamic_cast<IR*>(op2)->Operands[0]->valuePtr)
+				{
+					if (dynamic_cast<IR*>(op2)->Operands[0]->valuePtr == dynamic_cast<IR*>(op3)->Operands[0]->valuePtr)
+					{
+						if (dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr))
+						{
+							irList.push_back(dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr));
+							return dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr);
+						}
+					}
+				}
+			}
+		}
 
 		if (dynamic_cast<IR*>(op1) &&
 			dynamic_cast<IR*>(op2) &&
@@ -715,6 +1208,28 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 			dynamic_cast<IR*>(op2) &&
 			dynamic_cast<IR*>(op3))
 		{
+			if (dynamic_cast<IR*>(op1)->opr == IR::OPR::OPR_EXTRACT16H &&
+				dynamic_cast<IR*>(op2)->opr == IR::OPR::OPR_EXTRACT8H &&
+				dynamic_cast<IR*>(op3)->opr == IR::OPR::OPR_EXTRACT8L)
+			{
+				if (dynamic_cast<IR*>(op1)->Operands[0]->valuePtr == dynamic_cast<IR*>(op2)->Operands[0]->valuePtr)
+				{
+					if (dynamic_cast<IR*>(op2)->Operands[0]->valuePtr == dynamic_cast<IR*>(op3)->Operands[0]->valuePtr)
+					{
+						if (dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr))
+						{
+							irList.push_back(dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr));
+							return dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr);
+						}
+					}
+				}
+			}
+		}
+
+		if (dynamic_cast<IR*>(op1) &&
+			dynamic_cast<IR*>(op2) &&
+			dynamic_cast<IR*>(op3))
+		{
 			if (dynamic_cast<IR*>(op1)->opr == IR::OPR::OPR_BVV &&
 				dynamic_cast<IR*>(op2)->opr == IR::OPR::OPR_BVV &&
 				dynamic_cast<IR*>(op3)->opr == IR::OPR::OPR_BVV)
@@ -767,6 +1282,28 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 			irList.push_back(rstIR);
 		}
 		op3 = (RegValue[REG_EBP_8L].back());
+
+		if (dynamic_cast<IR*>(op1) &&
+			dynamic_cast<IR*>(op2) &&
+			dynamic_cast<IR*>(op3))
+		{
+			if (dynamic_cast<IR*>(op1)->opr == IR::OPR::OPR_EXTRACT16H &&
+				dynamic_cast<IR*>(op2)->opr == IR::OPR::OPR_EXTRACT8H &&
+				dynamic_cast<IR*>(op3)->opr == IR::OPR::OPR_EXTRACT8L)
+			{
+				if (dynamic_cast<IR*>(op1)->Operands[0]->valuePtr == dynamic_cast<IR*>(op2)->Operands[0]->valuePtr)
+				{
+					if (dynamic_cast<IR*>(op2)->Operands[0]->valuePtr == dynamic_cast<IR*>(op3)->Operands[0]->valuePtr)
+					{
+						if (dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr))
+						{
+							irList.push_back(dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr));
+							return dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr);
+						}
+					}
+				}
+			}
+		}
 
 		if (dynamic_cast<IR*>(op1) &&
 			dynamic_cast<IR*>(op2) &&
@@ -829,6 +1366,29 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 			dynamic_cast<IR*>(op2) &&
 			dynamic_cast<IR*>(op3))
 		{
+			if (dynamic_cast<IR*>(op1)->opr == IR::OPR::OPR_EXTRACT16H &&
+				dynamic_cast<IR*>(op2)->opr == IR::OPR::OPR_EXTRACT8H &&
+				dynamic_cast<IR*>(op3)->opr == IR::OPR::OPR_EXTRACT8L)
+			{
+				if (dynamic_cast<IR*>(op1)->Operands[0]->valuePtr == dynamic_cast<IR*>(op2)->Operands[0]->valuePtr)
+				{
+					if (dynamic_cast<IR*>(op2)->Operands[0]->valuePtr == dynamic_cast<IR*>(op3)->Operands[0]->valuePtr)
+					{
+						if (dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr))
+						{
+							irList.push_back(dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr));
+							return dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr);
+						}
+					}
+				}
+			}
+		}
+
+
+		if (dynamic_cast<IR*>(op1) &&
+			dynamic_cast<IR*>(op2) &&
+			dynamic_cast<IR*>(op3))
+		{
 			if (dynamic_cast<IR*>(op1)->opr == IR::OPR::OPR_BVV &&
 				dynamic_cast<IR*>(op2)->opr == IR::OPR::OPR_BVV &&
 				dynamic_cast<IR*>(op3)->opr == IR::OPR::OPR_BVV)
@@ -882,6 +1442,29 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 			irList.push_back(rstIR);
 		}
 		op3 = (RegValue[REG_ESI_8L].back());
+
+
+		if (dynamic_cast<IR*>(op1) &&
+			dynamic_cast<IR*>(op2) &&
+			dynamic_cast<IR*>(op3))
+		{
+			if (dynamic_cast<IR*>(op1)->opr == IR::OPR::OPR_EXTRACT16H &&
+				dynamic_cast<IR*>(op2)->opr == IR::OPR::OPR_EXTRACT8H &&
+				dynamic_cast<IR*>(op3)->opr == IR::OPR::OPR_EXTRACT8L)
+			{
+				if (dynamic_cast<IR*>(op1)->Operands[0]->valuePtr == dynamic_cast<IR*>(op2)->Operands[0]->valuePtr)
+				{
+					if (dynamic_cast<IR*>(op2)->Operands[0]->valuePtr == dynamic_cast<IR*>(op3)->Operands[0]->valuePtr)
+					{
+						if (dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr))
+						{
+							irList.push_back(dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr));
+							return dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr);
+						}
+					}
+				}
+			}
+		}
 
 		if (dynamic_cast<IR*>(op1) &&
 			dynamic_cast<IR*>(op2) &&
@@ -940,6 +1523,29 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 		}
 		op3 = (RegValue[REG_EDI_8L].back());
 
+
+		if (dynamic_cast<IR*>(op1) &&
+			dynamic_cast<IR*>(op2) &&
+			dynamic_cast<IR*>(op3))
+		{
+			if (dynamic_cast<IR*>(op1)->opr == IR::OPR::OPR_EXTRACT16H &&
+				dynamic_cast<IR*>(op2)->opr == IR::OPR::OPR_EXTRACT8H &&
+				dynamic_cast<IR*>(op3)->opr == IR::OPR::OPR_EXTRACT8L)
+			{
+				if (dynamic_cast<IR*>(op1)->Operands[0]->valuePtr == dynamic_cast<IR*>(op2)->Operands[0]->valuePtr)
+				{
+					if (dynamic_cast<IR*>(op2)->Operands[0]->valuePtr == dynamic_cast<IR*>(op3)->Operands[0]->valuePtr)
+					{
+						if (dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr))
+						{
+							irList.push_back(dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr));
+							return dynamic_cast<IR*>(dynamic_cast<IR*>(op1)->Operands[0]->valuePtr);
+						}
+					}
+				}
+			}
+		}
+
 		if (dynamic_cast<IR*>(op1) &&
 			dynamic_cast<IR*>(op2) &&
 			dynamic_cast<IR*>(op3))
@@ -976,7 +1582,7 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 			_plugin_logprintf("Reg EAX 8H :%x\n", ((_regdump.regcontext.cax) & 0xffff) >> 8);
 #endif
 			irList.push_back(rstIR);
-		}
+	}
 		op2 = RegValue[REG_EAX_8H].back();
 
 		if (RegValue[REG_EAX_8L].size() == 0)
@@ -987,7 +1593,7 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 			_plugin_logprintf("Reg EAX 8L :%x\n", (_regdump.regcontext.cax) & 0xff);
 #endif
 			irList.push_back(rstIR);
-		}
+}
 		op3 = RegValue[REG_EAX_8L].back();
 
 		if (dynamic_cast<IR*>(op2) &&
@@ -1144,7 +1750,7 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 
 		rstIR = new IR(IR::OPR::OPR_CONCAT, op2, op3);
 		rstIR->Size = 16;
-		//irList.push_back(rstIR);
+		irList.push_back(rstIR);
 		return rstIR;
 		break;
 	case ZYDIS_REGISTER_BP:
@@ -1334,9 +1940,9 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 		{
 			rstIR = CraeteBVVIR(((_regdump.regcontext.cax) & 0xffff) >> 8, 8);
 			RegValue[REG_EAX_8H].push_back(rstIR);
-//#ifdef DEBUG
+			//#ifdef DEBUG
 			_plugin_logprintf("Reg EAX 8H :%x\n", ((_regdump.regcontext.cax) & 0xffff) >> 8);
-//#endif
+			//#endif
 			irList.push_back(rstIR);
 		}
 		op2 = (RegValue[REG_EAX_8H].back());
@@ -1350,9 +1956,9 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 		{
 			rstIR = CraeteBVVIR((_regdump.regcontext.cax) & 0xff, 8);
 			RegValue[REG_EAX_8L].push_back(rstIR);
-//#ifdef DEBUG
+			//#ifdef DEBUG
 			_plugin_logprintf("Reg EAX 8L :%x\n", (_regdump.regcontext.cax) & 0xff);
-//#endif
+			//#endif
 			irList.push_back(rstIR);
 		}
 		op2 = (RegValue[REG_EAX_8L].back());
@@ -1442,7 +2048,7 @@ Value* GetRegisterValue(ZydisRegister _zydisReg, REGDUMP& _regdump, vector<IR*>&
 		op2 = (RegValue[REG_EDX_8L].back());
 		return op2;
 		break;
-	}
+}
 	return nullptr;
 }
 
@@ -1792,13 +2398,13 @@ void SaveMemoryValue(ZydisRegister zydisRegister, Value* _toSaveValue, BYTE _siz
 	IR* EAValue = nullptr;;
 
 	DWORD _targetMem;
-	
+
 	// 1. EA 계산
-	_targetMem = _regdump.regcontext.csp-4; //GetRegisterValueFromRegdump(zydisRegister, _regdump);
+	_targetMem = _regdump.regcontext.csp - 4; //GetRegisterValueFromRegdump(zydisRegister, _regdump);
 
 	// 2. EA를 계산하기 위한 IR 생성
 	// 2-1. 오퍼랜드에 Base가 존재하는 경우
-	
+
 	{
 		BaseValue = GetRegisterValue(zydisRegister, _regdump, irList);
 
@@ -1834,7 +2440,7 @@ void SaveMemoryValue(ZydisRegister zydisRegister, Value* _toSaveValue, BYTE _siz
 			// 메모리에 저장할 Value가 상수인 경우
 			if (dynamic_cast<ConstInt*>(_toSaveValue))
 			{
-				printf("SaveMemoryValue -> Value is Constnat\n");
+				_plugin_logprintf("[%p] SaveMemoryValue -> Value is Constnat\n",cntd);
 			}
 
 			// 메모리에 저장할 Value가 상수가 아닌 경우
@@ -1901,6 +2507,147 @@ void SaveMemoryValue(ZydisRegister zydisRegister, Value* _toSaveValue, BYTE _siz
 	return;
 }
 
+Value* GetEAValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOperand* _decodedOperandPtr, REGDUMP& _regdump, vector<IR*>& irList)
+{
+	IR* rstIR0 = nullptr;
+	IR* rstIR1 = nullptr;
+	IR* rstIR2 = nullptr;
+	IR* rstIR3 = nullptr;
+	IR* rstIR = nullptr;
+
+	Value* BaseValue = nullptr;
+	Value* Disp = nullptr;
+	Value* Scale = nullptr;
+	Value* IndexValue = nullptr;
+
+	IR* BaseDisp = nullptr;
+	IR* ScaleIndex = nullptr;
+	IR* EAValue = nullptr;
+	Value* op3;
+
+
+	Value* foldedValue;
+
+	DWORD targetMem1 = 0;
+	DWORD targetMem2 = 0;
+	DWORD targetMem3 = 0;
+	DWORD targetMem4 = 0;
+
+	DWORD op1ConstValue = 0;
+	DWORD op2ConstValue = 0;
+	DWORD op3ConstValue = 0;
+	DWORD op4ConstValue = 0;
+	DWORD foldedConstValue = 0;
+
+	BYTE readByte;
+
+	// 1. EA를 구한다.
+	targetMem1 = GetEffectiveAddress32(_decodedOperandPtr, _regdump);
+	targetMem2 = targetMem1 + 1;
+	targetMem3 = targetMem1 + 2;
+	targetMem4 = targetMem1 + 3;
+
+	// 2. EA에 대한 MemValue를 찾는다. Operand Size에 따라서 1바이트(offset1Value1), 2바이트(Concat offset1Value1~offset1Valu2), 4바이트(Concat offset1Value1~offset1Valu4) 단위로 찾는다.
+	if (_decodedOperandPtr->mem.base != ZYDIS_REGISTER_NONE)
+	{
+		BaseValue = GetRegisterValue(_decodedOperandPtr->mem.base, _regdump, irList);
+
+		if (BaseValue == nullptr)
+			MessageBoxA(0, "BaseValue is null", "SaveMemoryValue", 0);
+
+		if (_decodedOperandPtr->mem.disp.has_displacement)
+		{
+			// [Base + Index*Scale + Disp]
+
+			// Base + Disp
+			Disp = GetImmValue(_decodedOperandPtr->mem.disp.value, 32, irList);
+			BaseDisp = CraeteBinaryIR(BaseValue, Disp, IR::OPR_ADD);
+			irList.push_back(BaseDisp);
+
+			if (_decodedOperandPtr->mem.index != ZYDIS_REGISTER_NONE)
+			{
+				Scale = GetImmValue(_decodedOperandPtr->mem.scale, 32, irList);
+				IndexValue = GetRegisterValue(_decodedOperandPtr->mem.index, _regdump, irList);
+				ScaleIndex = CraeteBinaryIR(Scale, IndexValue, IR::OPR_MUL);
+				irList.push_back(ScaleIndex);
+				EAValue = CraeteBinaryIR(BaseDisp, ScaleIndex, IR::OPR_ADD);
+				irList.push_back(EAValue);
+
+			}
+
+			// [Base + Disp]
+			else
+			{
+				EAValue = BaseDisp;
+			}
+		}
+
+		// Displacement가 없는경우
+		else
+		{
+			// [Base + Index*Scale]
+			if (_decodedOperandPtr->mem.index != ZYDIS_REGISTER_NONE)
+			{
+				Scale = GetImmValue(_decodedOperandPtr->mem.scale, 32, irList);
+				IndexValue = GetRegisterValue(_decodedOperandPtr->mem.index, _regdump, irList);
+				ScaleIndex = CraeteBinaryIR(Scale, IndexValue, IR::OPR_MUL);
+				irList.push_back(ScaleIndex);
+				EAValue = CraeteBinaryIR(BaseValue, ScaleIndex, IR::OPR_ADD);
+				irList.push_back(EAValue);
+			}
+			// [Base]
+			else
+			{
+				Disp = GetImmValue(0, 32, irList);
+				EAValue = CraeteBinaryIR(BaseValue, Disp, IR::OPR_ADD);
+				irList.push_back(EAValue);
+			}
+		}
+	}
+
+	// 2-2. 오퍼랜드에 Base가 존재하지 않는 경우
+	else
+	{
+		// [index*Scale + Disp]
+		if (_decodedOperandPtr->mem.disp.has_displacement)
+		{
+
+			if (_decodedOperandPtr->mem.index != ZYDIS_REGISTER_NONE)
+			{
+				Scale = GetImmValue(_decodedOperandPtr->mem.scale, 32, irList);
+				IndexValue = GetRegisterValue(_decodedOperandPtr->mem.index, _regdump, irList);
+				ScaleIndex = CraeteBinaryIR(Scale, IndexValue, IR::OPR_MUL);
+				irList.push_back(ScaleIndex);
+
+				Disp = GetImmValue(_decodedOperandPtr->mem.disp.value, 32, irList);
+				EAValue = CraeteBinaryIR(ScaleIndex, Disp, IR::OPR_ADD);
+				irList.push_back(EAValue);
+			}
+
+			else
+			{
+				EAValue = CraeteBVVIR(_decodedOperandPtr->mem.disp.value, 32);
+				irList.push_back(EAValue);
+			}
+		}
+
+		// [index * Scale]
+		else
+		{
+			Scale = GetImmValue(_decodedOperandPtr->mem.scale, 32, irList);
+			IndexValue = GetRegisterValue(_decodedOperandPtr->mem.index, _regdump, irList);
+			ScaleIndex = CraeteBinaryIR(Scale, IndexValue, IR::OPR_MUL);
+			irList.push_back(ScaleIndex);
+		}
+	}
+
+#ifdef DEBUG
+	MessageBoxA(0, "rst", "rst", 0);
+#endif
+
+	return EAValue;
+}
+
 Value* GetMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOperand* _decodedOperandPtr, REGDUMP& _regdump, vector<IR*>& irList)
 {
 	IR* rstIR0 = nullptr;
@@ -1958,7 +2705,7 @@ Value* GetMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOpera
 			rstIR0 = CraeteBVVIR(readByte, 8);
 			MemValue[targetMem1].push_back(rstIR0);
 #ifdef DEBUG
-			_plugin_logprintf("[GetMemoryValue] [%p] %p :%x\n", _regdump.regcontext.cip ,targetMem1, readByte);
+			_plugin_logprintf("[GetMemoryValue] [%p] %p :%x\n", _regdump.regcontext.cip, targetMem1, readByte);
 #endif
 			irList.push_back(rstIR0);
 		}
@@ -2003,29 +2750,56 @@ Value* GetMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOpera
 		}
 		offset4Value = MemValue[targetMem4].back();
 
-		//if (dynamic_cast<IR*>(offset1Value) &&
-		//	dynamic_cast<IR*>(offset2Value) &&
-		//	dynamic_cast<IR*>(offset3Value) &&
-		//	dynamic_cast<IR*>(offset4Value))
-		//{
-		//	if (dynamic_cast<IR*>(offset1Value)->opr == IR::OPR::OPR_BVV &&
-		//		dynamic_cast<IR*>(offset2Value)->opr == IR::OPR::OPR_BVV &&
-		//		dynamic_cast<IR*>(offset3Value)->opr == IR::OPR::OPR_BVV &&
-		//		dynamic_cast<IR*>(offset4Value)->opr == IR::OPR::OPR_BVV)
-		//	{
-		//		op1ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset1Value)->Operands[0]->valuePtr)->intVar << 24;
-		//		op2ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset2Value)->Operands[0]->valuePtr)->intVar << 16;
-		//		op3ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset3Value)->Operands[0]->valuePtr)->intVar << 8;
-		//		op4ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset4Value)->Operands[0]->valuePtr)->intVar & 0xff;
-		//		foldedConstValue = op1ConstValue | op2ConstValue | op3ConstValue | op4ConstValue;
+		if (dynamic_cast<IR*>(offset1Value) &&
+			dynamic_cast<IR*>(offset2Value) &&
+			dynamic_cast<IR*>(offset3Value) &&
+			dynamic_cast<IR*>(offset4Value))
+		{
+			if (dynamic_cast<IR*>(offset1Value)->opr == IR::OPR::OPR_EXTRACT8L &&
+				dynamic_cast<IR*>(offset2Value)->opr == IR::OPR::OPR_EXTRACT8H &&
+				dynamic_cast<IR*>(offset3Value)->opr == IR::OPR::OPR_EXTRACT8HL &&
+				dynamic_cast<IR*>(offset4Value)->opr == IR::OPR::OPR_EXTRACT8HH)
+			{
+				if (dynamic_cast<IR*>(offset1Value)->Operands[0]->valuePtr == dynamic_cast<IR*>(offset2Value)->Operands[0]->valuePtr)
+				{
+					if (dynamic_cast<IR*>(offset2Value)->Operands[0]->valuePtr == dynamic_cast<IR*>(offset3Value)->Operands[0]->valuePtr)
+					{
+						if (dynamic_cast<IR*>(offset3Value)->Operands[0]->valuePtr == dynamic_cast<IR*>(offset4Value)->Operands[0]->valuePtr)
+						{
+							if (dynamic_cast<IR*>(offset1Value)->Operands[0]->valuePtr)
+							{
+								irList.push_back(dynamic_cast<IR*>(dynamic_cast<IR*>(offset1Value)->Operands[0]->valuePtr));
+								return dynamic_cast<IR*>(dynamic_cast<IR*>(offset1Value)->Operands[0]->valuePtr);
+							}
+						}
+					}
+				}
+			}
+		}
 
-		//		rstIR = CraeteBVVIR(foldedConstValue, 32);
-		//		irList.push_back(rstIR);
-		//		//_plugin_logprintf("[GetMemoryValue] %p foldedConstValue %p :%x\n", _regdump.regcontext.cip, targetMem4, readByte);
-		//		return rstIR;
-		//	}
+		if (dynamic_cast<IR*>(offset1Value) &&
+			dynamic_cast<IR*>(offset2Value) &&
+			dynamic_cast<IR*>(offset3Value) &&
+			dynamic_cast<IR*>(offset4Value))
+		{
+			if (dynamic_cast<IR*>(offset1Value)->opr == IR::OPR::OPR_BVV &&
+				dynamic_cast<IR*>(offset2Value)->opr == IR::OPR::OPR_BVV &&
+				dynamic_cast<IR*>(offset3Value)->opr == IR::OPR::OPR_BVV &&
+				dynamic_cast<IR*>(offset4Value)->opr == IR::OPR::OPR_BVV)
+			{
+				op1ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset1Value)->Operands[0]->valuePtr)->intVar << 24;
+				op2ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset2Value)->Operands[0]->valuePtr)->intVar << 16;
+				op3ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset3Value)->Operands[0]->valuePtr)->intVar << 8;
+				op4ConstValue = dynamic_cast<ConstInt*>(dynamic_cast<IR*>(offset4Value)->Operands[0]->valuePtr)->intVar & 0xff;
+				foldedConstValue = op1ConstValue | op2ConstValue | op3ConstValue | op4ConstValue;
 
-		//}
+				rstIR = CraeteBVVIR(foldedConstValue, 32);
+				irList.push_back(rstIR);
+				//_plugin_logprintf("[GetMemoryValue] %p foldedConstValue %p :%x\n", _regdump.regcontext.cip, targetMem4, readByte);
+				return rstIR;
+			}
+
+		}
 
 		rstIR = new IR(IR::OPR::OPR_CONCAT, offset1Value, offset2Value, offset3Value, offset4Value);
 		rstIR->Size = 32;
@@ -2108,7 +2882,7 @@ Value* GetMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOpera
 #endif
 
 	return rstIR;
-}
+	}
 
 Value* GetStackMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecodedOperand* _decodedOperandPtr, REGDUMP& _regdump, vector<IR*>& irList)
 {
@@ -2211,6 +2985,33 @@ Value* GetStackMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecoded
 			irList.push_back(rstIR3);
 		}
 		offset4Value = MemValue[targetMem4].back();
+
+		if (dynamic_cast<IR*>(offset1Value) &&
+			dynamic_cast<IR*>(offset2Value) &&
+			dynamic_cast<IR*>(offset3Value) &&
+			dynamic_cast<IR*>(offset4Value))
+		{
+			if (dynamic_cast<IR*>(offset1Value)->opr == IR::OPR::OPR_EXTRACT8L &&
+				dynamic_cast<IR*>(offset2Value)->opr == IR::OPR::OPR_EXTRACT8H &&
+				dynamic_cast<IR*>(offset3Value)->opr == IR::OPR::OPR_EXTRACT8HL &&
+				dynamic_cast<IR*>(offset4Value)->opr == IR::OPR::OPR_EXTRACT8HH)
+			{
+				if (dynamic_cast<IR*>(offset1Value)->Operands[0]->valuePtr == dynamic_cast<IR*>(offset2Value)->Operands[0]->valuePtr)
+				{
+					if (dynamic_cast<IR*>(offset2Value)->Operands[0]->valuePtr == dynamic_cast<IR*>(offset3Value)->Operands[0]->valuePtr)
+					{
+						if (dynamic_cast<IR*>(offset3Value)->Operands[0]->valuePtr == dynamic_cast<IR*>(offset4Value)->Operands[0]->valuePtr)
+						{
+							if (dynamic_cast<IR*>(offset1Value)->Operands[0]->valuePtr)
+							{
+								irList.push_back(dynamic_cast<IR*>(dynamic_cast<IR*>(offset1Value)->Operands[0]->valuePtr));
+								return dynamic_cast<IR*>(dynamic_cast<IR*>(offset1Value)->Operands[0]->valuePtr);
+							}
+						}
+					}
+				}
+			}
+		}
 
 		//if (dynamic_cast<IR*>(offset1Value) &&
 		//	dynamic_cast<IR*>(offset2Value) &&
@@ -2317,7 +3118,7 @@ Value* GetStackMemoryValue(ZydisDecodedInstruction* decodedInstPtr, ZydisDecoded
 #endif
 
 	return rstIR;
-}
+	}
 
 Value* GetImmValue(ZydisDecodedOperand* _decodedOperandPtr, vector<IR*>& irList)
 {
@@ -2409,6 +3210,10 @@ int CreateIR(ZydisDecodedInstruction* ptr_di, ZydisDecodedOperand* operandPTr, R
 {
 	Value* Op1 = nullptr;
 	Value* Op2 = nullptr;
+
+	Value* StackOp1 = nullptr;
+	Value* StackOp2 = nullptr;
+
 	Value* RealOperand;
 
 	IR* rst;
@@ -2502,15 +3307,15 @@ int CreateIR(ZydisDecodedInstruction* ptr_di, ZydisDecodedOperand* operandPTr, R
 
 		Op2 = GetOperand(ptr_di, &operandPTr[1], _regdump, irList);// x86 오퍼랜드를 Get하는 IR을 생성한다.
 
-		if (ptr_di->opcode == 0xC1 || ptr_di->opcode == 0xD0 || ptr_di->opcode == 0xD3)
-			Op2->Size = Op1->Size;
+		//if (ptr_di->opcode == 0xC1 || ptr_di->opcode == 0xD0 || ptr_di->opcode == 0xD3)
+		//	Op2->Size = Op1->Size;
 
-		// 두 개의 오퍼랜드는 동일해야 한다.
-		if (Op1->Size != Op2->Size)
-		{
-			_plugin_logprintf("GenerateOPR_SAR Error (Operand is not matched %p)\n", _regdump.regcontext.cip);
-			return 0;
-		}
+		//// 두 개의 오퍼랜드는 동일해야 한다.
+		//if (Op1->Size != Op2->Size)
+		//{
+		//	_plugin_logprintf("GenerateOPR_SAR Error (Operand is not matched %p)\n", _regdump.regcontext.cip);
+		//	return 0;
+		//}
 		// Constant Folding 가능한 경우 CreateBinaryIR를 호출하지 않고 Imm Value 생성
 
 		// Constant Folding 가능 조건이 아닌 경우 IR 생성
@@ -2690,11 +3495,11 @@ int CreateIR(ZydisDecodedInstruction* ptr_di, ZydisDecodedOperand* operandPTr, R
 		// t1 = Load ESP t2 = ESP 
 		Op1 = GetStackMemoryValue(ptr_di, &operandPTr[0], _regdump, irList); // Stack의 값을 읽는다.
 
-		Op2 = GetOperand(ptr_di, &operandPTr[0], _regdump, irList); // Stack에서 읽어온 값을 가져온다.
+		//Op2 = GetOperand(ptr_di, &operandPTr[0], _regdump, irList); // Stack에서 읽어온 값을 가져온다.
 
-		Op1 = GetRegisterValue(ZYDIS_REGISTER_ESP, _regdump, irList);
-		Op2 = GetImmValue(4, operandPTr[0].size, irList);
-		rst = CraeteBinaryIR(Op1, Op2, IR::OPR::OPR_ADD);
+		StackOp1 = GetRegisterValue(ZYDIS_REGISTER_ESP, _regdump, irList);
+		StackOp2 = GetImmValue(4, operandPTr[0].size, irList);
+		rst = CraeteBinaryIR(StackOp1, StackOp2, IR::OPR::OPR_ADD);
 		irList.push_back(rst); // ESP = ESP + 4
 
 		SetOperand(ptr_di, &operandPTr[0], Op1, _regdump, irList);
@@ -2759,6 +3564,10 @@ int CreateIR(ZydisDecodedInstruction* ptr_di, ZydisDecodedOperand* operandPTr, R
 	case ZYDIS_MNEMONIC_XCHG:
 		break;
 	case ZYDIS_MNEMONIC_LEA:
+		Op2 = GetEAValue(ptr_di, &operandPTr[1], _regdump, irList);
+		SetOperand(ptr_di, &operandPTr[0], Op2, _regdump, irList);
+		IRList.insert(make_pair(_offset, irList));
+		return 1;		
 		break;
 	case ZYDIS_MNEMONIC_CWD:
 		break;
@@ -3133,8 +3942,23 @@ int CreateIR(ZydisDecodedInstruction* ptr_di, ZydisDecodedOperand* operandPTr, R
 		return 1;
 		break;
 	case ZYDIS_MNEMONIC_MOVSX:
+		Op1 = GetOperand(ptr_di, &operandPTr[1], _regdump, irList);
+		rst = CraeteSignExtendIR(Op1, operandPTr[0].size, irList);
+		irList.push_back(rst);
+		SetOperand(ptr_di, &operandPTr[0], rst, _regdump, irList); // x86 오퍼랜드를 Set하는 IR을 생성한다.
+		IRList.insert(make_pair(_offset, irList));
+		return 1;
 		break;
 	case ZYDIS_MNEMONIC_MOVZX:
+		// t1 = OP2
+		// t2 = OPR_ZEXT t1
+		// OP1 = t2
+		Op1 = GetOperand(ptr_di, &operandPTr[1], _regdump, irList);
+		rst = CraeteZeroExtendIR(Op1, operandPTr[0].size, irList);
+		irList.push_back(rst);
+		SetOperand(ptr_di, &operandPTr[0], rst, _regdump, irList); // x86 오퍼랜드를 Set하는 IR을 생성한다.
+		IRList.insert(make_pair(_offset, irList));
+		return 1;
 		break;
 	case ZYDIS_MNEMONIC_CMPXCHG:
 		break;
@@ -3358,6 +4182,12 @@ void printIR(IR* _irPtr)
 	case IR::OPR::OPR_EXTRACT8L:
 		_plugin_logprintf("%s = OPR_EXTRACT8L %s\n", _irPtr->Name.c_str(), _irPtr->Operands[0]->valuePtr->Name.c_str());
 		break;
+	case IR::OPR::OPR_ZEXT:
+		_plugin_logprintf("%s = OPR_ZEXT %s %s\n", _irPtr->Name.c_str(), _irPtr->Operands[0]->valuePtr->Name.c_str(), _irPtr->Operands[1]->valuePtr->Name.c_str());
+		break;
+	case IR::OPR::OPR_SEXT:
+		_plugin_logprintf("%s = OPR_SEXT %s %s\n", _irPtr->Name.c_str(), _irPtr->Operands[0]->valuePtr->Name.c_str(), _irPtr->Operands[1]->valuePtr->Name.c_str());
+		break;
 	case IR::OPR::OPR_ADD:
 		_plugin_logprintf("%s = OPR_ADD %s %s\n", _irPtr->Name.c_str(), _irPtr->Operands[0]->valuePtr->Name.c_str(), _irPtr->Operands[1]->valuePtr->Name.c_str());
 		break;
@@ -3419,7 +4249,7 @@ void printIR(IR* _irPtr)
 		_plugin_logprintf("STORE %s %s\n", _irPtr->Operands[0]->valuePtr->Name.c_str(), _irPtr->Operands[1]->valuePtr->Name.c_str());
 		break;
 	default:
-		_plugin_logprintf("Not Implemented print :%d\n",_irPtr->opr);
+		_plugin_logprintf("Not Implemented print :%d\n", _irPtr->opr);
 		break;
 	}
 }
@@ -3455,6 +4285,12 @@ string IR::printOpr(OPR _opr)
 	case IR::OPR::OPR_EXTRACT8L:
 		return string("EXTRACT8L");
 		break;
+	case IR::OPR::OPR_ZEXT:
+		return string("ZEXT");
+		break;
+	case IR::OPR::OPR_SEXT:
+		return string("SEXT");
+		break;
 	case IR::OPR::OPR_ADD:
 		return string("OPR_ADD");
 		break;
@@ -3488,64 +4324,6 @@ string IR::printOpr(OPR _opr)
 	}
 }
 
-//string printOpr(IR::OPR _opr)
-//{
-//	switch (_opr)
-//	{
-//	case IR::OPR::OPR_CONCAT:
-//		return string("Concat");
-//		break;
-//	case IR::OPR::OPR_BVV:
-//		return string("OPR_BVV");
-//		break;
-//	case IR::OPR::OPR_EXTRACT16H:
-//		return string("EXTRACT16H");
-//		break;
-//	case IR::OPR::OPR_EXTRACT8HH:
-//		return string("EXTRACT8HH");
-//		break;
-//	case IR::OPR::OPR_EXTRACT8HL:
-//		return string("EXTRACT8HL");
-//		break;
-//	case IR::OPR::OPR_EXTRACT8H:
-//		return string("EXTRACT8H");
-//		break;
-//	case IR::OPR::OPR_EXTRACT8L:
-//		return string("EXTRACT8L");
-//		break;
-//	case IR::OPR::OPR_ADD:
-//		return string("OPR_ADD");
-//		break;
-//	case IR::OPR::OPR_SUB:
-//		return string("OPR_SUB");
-//		break;
-//	case IR::OPR::OPR_OR:
-//		return string("OPR_OR");
-//		break;
-//	case IR::OPR::OPR_AND:
-//		return string("OPR_AND");
-//		break;
-//	case IR::OPR::OPR_XOR:
-//		return string("OPR_XOR");
-//		break;
-//	case IR::OPR::OPR_ROL:
-//		return string("OPR_ROL");
-//		break;
-//	case IR::OPR::OPR_SAR:
-//		return string("OPR_SAR");
-//		break;
-//	case IR::OPR::OPR_LOAD:
-//		return string("OPR_LOAD");
-//		break;
-//	case IR::OPR::OPR_STORE:
-//		return string("OPR_X");
-//		break;
-//	default:
-//		return string("OPR_STORE");
-//		break;
-//	}
-//}
-
 string EvaluateExpTree(std::shared_ptr<BTreeNode> bt)
 {
 	string op1, op2, op3, op4;
@@ -3553,11 +4331,12 @@ string EvaluateExpTree(std::shared_ptr<BTreeNode> bt)
 
 	if (bt->left == NULL)
 	{
+		_plugin_logprintf("bt->left == NULL bt->nodeName %s\n", bt->nodeName.c_str());
 		if (bt->m_NodeType == NT_SYMVAR)
 		{
 			if (symbolExprMap.find(bt->nodeName) != symbolExprMap.end())
 			{
-				z3Equation = symbolExprMap[bt->nodeName];
+				//z3Equation = symbolExprMap[bt->nodeName];
 			}
 		}
 		return bt->nodeName;
@@ -3589,32 +4368,43 @@ string EvaluateExpTree(std::shared_ptr<BTreeNode> bt)
 
 		else if (bt->third != nullptr && bt->fourth == nullptr)
 		{
-			return "(Concat " + op1 + " " + op2 + " " + op3 + ")";
+			return "";//"(Concat " + op1 + " " + op2 + " " + op3 + ")";
 		}
 
 		else
 		{
-			return "(Concat " + op1 + " " + op2 + ")";
+			return "";//"(Concat " + op1 + " " + op2 + ")";
 		}
+	}
+
+	else if (bt->nodeName.compare("EXTRACT8HH") == 0)
+	{
+		return "";//"(Extract 31 24  " + op1 + ")";
+	}
+
+	else if (bt->nodeName.compare("EXTRACT8HL") == 0)
+	{
+		return "";//"(Extract 23 16  " + op1 + ")";
 	}
 
 	else if (bt->nodeName.compare("EXTRACT16H") == 0)
 	{
-		return "(Extract 31 16  " + op1 + ")";
+		return "";//"(Extract 31 16  " + op1 + ")";
 	}
 
 	else if (bt->nodeName.compare("EXTRACT8H") == 0)
 	{
-		return "(Extract 15 8  " + op1 + ")";
+		return "";//"(Extract 15 8  " + op1 + ")";
 	}
 
 	else if (bt->nodeName.compare("EXTRACT8L") == 0)
 	{
-		return "(Extract 7 0  " + op1 + ")";
+		return "";//"(Extract 7 0  " + op1 + ")";
 	}
 
 	else
 	{
+		//_plugin_logprintf("bt->nodeName %s\n", bt->nodeName.c_str());
 		if (bt->nodeName.empty() == false)
 		{
 			//if (bt->m_NodeType == NT_SYMVAR)
@@ -3631,6 +4421,7 @@ string EvaluateExpTree(std::shared_ptr<BTreeNode> bt)
 			//}
 			//printf("[test] %s\n", bt->nodeName.c_str());
 			exprString = bt->nodeName;
+			return exprString;
 		}
 
 		else

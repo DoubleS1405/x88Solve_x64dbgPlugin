@@ -19,11 +19,12 @@ class BTreeNode
 public:
 	NodeType m_NodeType;
 	std::string nodeName;
+	unsigned int childrenCount =0;
 	Value* valPtr;
 	std::shared_ptr<BTreeNode> left;
 	std::shared_ptr<BTreeNode> right;
 	std::shared_ptr<BTreeNode> third;
-	std::shared_ptr<BTreeNode> fourth;
+	std::shared_ptr<BTreeNode> fourth;	
 };
 
 

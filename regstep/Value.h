@@ -49,6 +49,7 @@ using namespace std;
 
 class OPERAND;
 class IR;
+extern DWORD cntd;
 
 class Value
 {
@@ -103,6 +104,8 @@ public:
 		OPR_EXTRACT8HL,
 		OPR_EXTRACT8H,
 		OPR_EXTRACT8L,
+		OPR_ZEXT,
+		OPR_SEXT,
 		OPR_BVV, // BitVecVal 
 		OPR_GET32INT,
 		OPR_GET16INT,
@@ -146,170 +149,19 @@ public:
 		opr = _opr;
 	}
 
-	IR(OPR _opr, Value* op1)
-	{
-		opr = _opr;
-		AddOperand(op1);
+	IR(OPR _opr, Value* op1);
 
-		if (op1->isTainted)
-		{
-			isTainted = true;
-		}
+	IR(string ValName, DWORD index, OPR _opr, Value* op1);
 
-		ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
-		ast->m_NodeType = NT_OPERATOR;
+	IR(OPR _opr, Value* op1, Value* op2);
 
-		std::shared_ptr<BTreeNode> ptr1 = std::make_shared<BTreeNode>(MakeBTreeNode(op1->Name));
-		MakeLeftSubTree(ast, op1->ast);
-	}
+	IR(OPR _opr, Value* op1, Value* op2, BYTE size);
 
-	IR(string ValName, DWORD index, OPR _opr, Value* op1) :Value(ValName, index, op1->isTainted)
-	{
-		opr = _opr;
-		AddOperand(op1);
+	IR(string ValName, DWORD index, OPR _opr, Value* op1, Value* op2);
 
-		ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
-		ast->m_NodeType = NT_OPERATOR;
-
-		std::shared_ptr<BTreeNode> ptr1 = std::make_shared<BTreeNode>(MakeBTreeNode(op1->Name));
-		MakeLeftSubTree(ast, op1->ast);
-	}
-
-	IR(OPR _opr, Value* op1, Value* op2)
-	{
-		if (op1->Size != op2->Size)
-		{
-			printf("[IR] Operand size is mismatching\n");
-		}
-		opr = _opr;
-		AddOperand(op1);
-		AddOperand(op2);
-
-		if (op1->isTainted || op2->isTainted)
-		{
-			isTainted = true;
-		}
-
-		ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
-		ast->m_NodeType = NT_OPERATOR;
-
-		std::shared_ptr<BTreeNode> ptr1 = std::make_shared<BTreeNode>(MakeBTreeNode(op1->Name));
-		MakeLeftSubTree(ast, op1->ast);
-
-		std::shared_ptr<BTreeNode>  ptr2 = std::make_shared<BTreeNode>(MakeBTreeNode(op2->Name));
-		MakeRightSubTree(ast, op2->ast);
-	}
-
-	IR(OPR _opr, Value* op1, Value* op2, BYTE size)
-	{
-		opr = _opr;
-		Size = size;
-		AddOperand(op1);
-		AddOperand(op2);
-
-		if (op1->isTainted || op2->isTainted)
-		{
-			isTainted = true;
-		}
-
-		ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
-		ast->m_NodeType = NT_OPERATOR;
-
-		std::shared_ptr<BTreeNode> ptr1 = std::make_shared<BTreeNode>(MakeBTreeNode(op1->Name));
-		MakeLeftSubTree(ast, op1->ast);
-
-		std::shared_ptr<BTreeNode>  ptr2 = std::make_shared<BTreeNode>(MakeBTreeNode(op2->Name));
-		MakeRightSubTree(ast, op2->ast);
-	}
-
-	IR(string ValName, DWORD index, OPR _opr, Value* op1, Value* op2)
-	{
-		opr = _opr;
-		AddOperand(op1);
-		AddOperand(op2);
-
-		if (op1->isTainted || op2->isTainted)
-		{
-			isTainted = true;
-		}
-
-		ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
-		ast->m_NodeType = NT_OPERATOR;
-
-		std::shared_ptr<BTreeNode> ptr1 = std::make_shared<BTreeNode>(MakeBTreeNode(op1->Name));
-		MakeLeftSubTree(ast, op1->ast);
-
-		std::shared_ptr<BTreeNode>  ptr2 = std::make_shared<BTreeNode>(MakeBTreeNode(op2->Name));
-		MakeRightSubTree(ast, op2->ast);
-
-		Value(ValName, index);
-	}
-
-	IR(OPR _opr, Value* op1, Value* op2, Value* op3)
-	{
-		opr = _opr;
-		AddOperand(op1);
-		AddOperand(op2);
-		AddOperand(op3);
-
-		if (op1->isTainted || op2->isTainted || op3->isTainted)
-		{
-			isTainted = true;
-		}
-
-		ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
-		ast->m_NodeType = NT_OPERATOR;
-
-		std::shared_ptr<BTreeNode> ptr1 = std::make_shared<BTreeNode>(MakeBTreeNode(op1->Name));
-		MakeLeftSubTree(ast, op1->ast);
-
-		std::shared_ptr<BTreeNode>  ptr2 = std::make_shared<BTreeNode>(MakeBTreeNode(op2->Name));
-		MakeRightSubTree(ast, op2->ast);
-
-		std::shared_ptr<BTreeNode>  ptr3 = std::make_shared<BTreeNode>(MakeBTreeNode(op3->Name));
-		MakeThirdSubTree(ast, op3->ast);
-	}
+	IR(OPR _opr, Value* op1, Value* op2, Value* op3);
 //#define DEBUG
-	IR(OPR _opr, Value* op1, Value* op2, Value* op3, Value* op4)
-	{
-		opr = _opr;
-		AddOperand(op1);
-		AddOperand(op2);
-		AddOperand(op3);
-		AddOperand(op4);
-
-		if (op1->isTainted || op2->isTainted || op3->isTainted || op4->isTainted)
-		{
-			isTainted = true;
-		}
-
-		ast = std::make_shared<BTreeNode>(MakeBTreeNode(printOpr(_opr)));
-		ast->m_NodeType = NT_OPERATOR;
-
-		std::shared_ptr<BTreeNode> ptr1 = std::make_shared<BTreeNode>(MakeBTreeNode(op1->Name));
-		MakeLeftSubTree(ast, op1->ast);
-
-		std::shared_ptr<BTreeNode>  ptr2 = std::make_shared<BTreeNode>(MakeBTreeNode(op2->Name));
-		MakeRightSubTree(ast, op2->ast);
-#ifdef DEBUG
-		MessageBoxA(0, "Op2", "Op2", 0);
-#endif
-
-
-		std::shared_ptr<BTreeNode>  ptr3 = std::make_shared<BTreeNode>(MakeBTreeNode(op3->Name));
-		MakeThirdSubTree(ast, op3->ast);
-
-#ifdef DEBUG
-		MessageBoxA(0, "Op3", "Op3", 0);
-#endif
-
-		std::shared_ptr<BTreeNode>  ptr4 = std::make_shared<BTreeNode>(MakeBTreeNode(op4->Name));
-		MakeFourthSubTree(ast, op4->ast);
-
-#ifdef DEBUG
-		MessageBoxA(0, "Op4", "Op4", 0);
-#endif
-	}
+	IR(OPR _opr, Value* op1, Value* op2, Value* op3, Value* op4);
 	string printOpr(OPR _opr);
 };
 
@@ -352,6 +204,10 @@ IR* CreateSubIR(Value* op1, Value* op2);
 IR* CraeteStoreIR(Value* op1, Value* op2, IR::OPR _opr);
 
 IR* CraeteBVVIR(DWORD intVal, BYTE size);
+
+IR* CraeteZeroExtendIR(Value* _val, BYTE size, vector<IR*>& irList);
+
+IR* CraeteSignExtendIR(Value* _val, BYTE size, vector<IR*>& irList);
 
 int CreateIR(ZydisDecodedInstruction* ptr_di, ZydisDecodedOperand* operandPTr, REGDUMP& regdump, DWORD _offset);
 

@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "ast.h"
+#include "plugin.h"
+
+extern DWORD testNodeCnt;
 
 
 BTreeNode MakeBTreeNode(string nodeName)
@@ -73,12 +76,13 @@ void PreorderTraverse(std::shared_ptr<BTreeNode> bt)
 	//{
 	//	printf("(");
 	//}
-	printf("(%s", bt->nodeName.c_str());
+	//_plugin_logprintf("(%s", bt->nodeName.c_str());
+	testNodeCnt++;
 	PreorderTraverse(bt->left);
 	PreorderTraverse(bt->right);
 	PreorderTraverse(bt->third);
 	PreorderTraverse(bt->fourth);
-	printf(")", bt->nodeName.c_str());
+	//_plugin_logprintf(")", bt->nodeName.c_str());
 }
 
 void InorderTraverse(std::shared_ptr<BTreeNode> bt)

@@ -5,6 +5,7 @@
 #include <set>
 #include <map>
 #include "Value.h"
+#include "optimize.h"
 
 using namespace Script;
 using namespace std;
@@ -23,6 +24,8 @@ z3::context* z3Context;
 z3::expr* z3Equation;
 
 DWORD cntd = 0;
+
+DWORD testNodeCnt = 0;
 
 enum
 {
@@ -617,10 +620,10 @@ PLUG_EXPORT void CBTRACEEXECUTE(CBTYPE cbType, PLUG_CB_TRACEEXECUTE* info)
 	ZydisDecoderDecodeFull(&Decoder, buf, 15, &DecodedInst, DecodedOperand,
 		ZYDIS_MAX_OPERAND_COUNT_VISIBLE, ZYDIS_DFLAG_VISIBLE_OPERANDS_ONLY);
 
+	cntd = regdump.regcontext.cip;
 	CreateIR(&DecodedInst, DecodedOperand, regdump, info->cip);
 	//_plugin_logprintf("Create IR :%p\n", info->cip);
-	cntd++;
-
+	//cntd++;
 }
 
 //PLUG_EXPORT void CBTRACEEXECUTE(CBTYPE cbType, PLUG_CB_TRACEEXECUTE* info)
@@ -1182,36 +1185,47 @@ PLUG_EXPORT void CBBREAKPOINT(CBTYPE cbType, PLUG_CB_BREAKPOINT* info)
 	}
 		
 	_plugin_logprintf("IRList.size() %d \n", IRList.size());
+
+	//DeadStoreElimination(IRList);
+
+	_plugin_logprintf("After DSE IRList.size() %d \n", IRList.size());
+
 	for (auto it1 : IRList)
 	{
 		_plugin_logprintf("--------------------------------\n");
 		for (auto it : it1.second)
 		{
-			if(it == nullptr)
+			if (it == nullptr)
+			{
 				_plugin_logprintf("[%p] it is null\n", it1.first);
+			}
+
 			else
 			{
 				_plugin_logprintf("[%p]", it1.first);
 				printIR(it);
-				if (it->UseList.size() == 0)
-				{
-					_plugin_logprintf("[%p] Dead Store\n", it1.first);
-				}
 
 				if (it->isTainted)
 				{
 					//_plugin_logprintf("[%p]Tainted\n", it1.first);
 					taintList.insert(it1.first);
 				}
+
+				//if (it1.first == StartAddress + 0x7D367)
+				{					
+					//PreorderTraverse(it->ast);
+					_plugin_logprintf("childrenCount : %d\n", it->ast->childrenCount);
+					//_plugin_logprintf("test EvaluateExpTree %s\n",EvaluateExpTree(it->ast).c_str());
+				}
 			}
 		}
 		_plugin_logprintf("--------------------------------\n");
 	}
 
-	for (auto taintIt : taintList)
-	{
-		_plugin_logprintf("Tainted %p\n", taintIt);
-	}
+	//for (auto taintIt : taintList)
+	//{
+	//	_plugin_logprintf("Tainted %p\n", taintIt);
+	//}
 
 	//for (auto it1 : IRList)
 	//{
@@ -1280,28 +1294,30 @@ PLUG_EXPORT void CBCREATEPROCESS(CBTYPE ctype, PLUG_CB_CREATEPROCESS* info)
 	z3Context = new z3::context;
 
 	_plugin_logprintf("initReg() start\n");
-	Value* eaxValue = new Value("EAX", 0);
+	Value* eaxValue = new Value("EDX", 0);
 	eaxValue->ast = std::make_shared<BTreeNode>(MakeBTreeNode(eaxValue->Name));
 	eaxValue->ast->m_NodeType = NT_SYMVAR;
 	eaxValue->Size = 32;
-	z3::expr* z3eax = new z3::expr(z3Context->bv_const("EAX(0)", 32));
-	z3Equation = new z3::expr(*z3eax);
-	symbolExprMap["EAX(0)"] = z3eax;
+	_plugin_logprintf("eaxValue->ast->left :%p eaxValue->ast->right :%p eaxValue->ast->third :%p eaxValue->ast->fourth :%p\n", 
+		eaxValue->ast->left, eaxValue->ast->right, eaxValue->ast->third, eaxValue->ast->fourth);
+	//z3::expr* z3eax = new z3::expr(z3Context->bv_const("EAX(0)", 32));
+	//z3Equation = new z3::expr(*z3eax);
+	//symbolExprMap["EAX(0)"] = z3eax;
 
-	IR* reg16hIR = new IR("ESI16H", RegValue[REG_ESI_16H].size(), IR::OPR::OPR_EXTRACT16H, eaxValue);
+	IR* reg16hIR = new IR("EDX16H", RegValue[REG_EDX_16H].size(), IR::OPR::OPR_EXTRACT16H, eaxValue);
 	reg16hIR->Size = 16;
 	reg16hIR->isTainted = true;
-	RegValue[REG_ESI_16H].push_back(reg16hIR);
+	RegValue[REG_EDX_16H].push_back(reg16hIR);
 
-	IR* regEax8hIR = new IR("ESI8H", RegValue[REG_ESI_8H].size(), IR::OPR::OPR_EXTRACT8H, eaxValue);
+	IR* regEax8hIR = new IR("EDX8H", RegValue[REG_EDX_8H].size(), IR::OPR::OPR_EXTRACT8H, eaxValue);
 	regEax8hIR->Size = 8;
 	regEax8hIR->isTainted = true;
-	RegValue[REG_ESI_8H].push_back(regEax8hIR);
+	RegValue[REG_EDX_8H].push_back(regEax8hIR);
 
-	IR* regEax8lIR = new IR("ESI8L", RegValue[REG_ESI_8L].size(), IR::OPR::OPR_EXTRACT8L, eaxValue);
+	IR* regEax8lIR = new IR("EDX8L", RegValue[REG_EDX_8L].size(), IR::OPR::OPR_EXTRACT8L, eaxValue);
 	regEax8lIR->Size = 8;
 	regEax8lIR->isTainted = true;
-	RegValue[REG_ESI_8L].push_back(regEax8lIR);
+	RegValue[REG_EDX_8L].push_back(regEax8lIR);
 	_plugin_logprintf("%s StartAddress:%p, EndAddress:%p\n", modInfo.name, StartAddress, EndAddress);
 
 	Value* espValue = new Value("ESP", 0);
