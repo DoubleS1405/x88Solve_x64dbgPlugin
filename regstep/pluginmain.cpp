@@ -7,6 +7,7 @@ int hMenu;
 int hMenuDisasm;
 int hMenuDump;
 int hMenuStack;
+int hMenuGraph;
 
 PLUG_EXPORT bool pluginit(PLUG_INITSTRUCT* initStruct)
 {
@@ -30,5 +31,6 @@ PLUG_EXPORT void plugsetup(PLUG_SETUPSTRUCT* setupStruct)
     hMenuDisasm = setupStruct->hMenuDisasm;
     hMenuDump = setupStruct->hMenuDump;
     hMenuStack = setupStruct->hMenuStack;
+    hMenuGraph = setupStruct->hMenuGraph;
     pluginSetup();
 }

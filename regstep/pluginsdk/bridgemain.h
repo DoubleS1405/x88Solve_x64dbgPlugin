@@ -172,11 +172,14 @@ extern "C"
 #define MAX_WATCH_NAME_SIZE 256
 #define MAX_STRING_SIZE 512
 #define MAX_ERROR_SIZE 512
-#define RIGHTS_STRING_SIZE (sizeof("ERWCG") + 1)
+#define RIGHTS_STRING_SIZE (sizeof("ERWCG"))
 #define MAX_SECTION_SIZE 10
 #define MAX_COMMAND_LINE_SIZE 256
 #define MAX_MNEMONIC_SIZE 64
+
+#ifndef PAGE_SIZE
 #define PAGE_SIZE 0x1000
+#endif // PAGE_SIZE
 
 //Debugger enums
 typedef enum
@@ -336,6 +339,7 @@ typedef enum
     DBG_GET_SYMBOL_INFO,            // param1=void* symbol,              param2=SYMBOLINFO* info
     DBG_GET_DEBUG_ENGINE,           // param1=unused,                    param2-unused
     DBG_GET_SYMBOL_INFO_AT,         // param1=duint addr,                param2=SYMBOLINFO* info
+    DBG_XREF_ADD_MULTI,             // param1=const XREF_EDGE* edges,    param2=duint count
 } DBGMSG;
 
 typedef enum
@@ -530,6 +534,11 @@ typedef enum
     sym_symbol
 } SYMBOLTYPE;
 
+#define SYMBOL_MASK_IMPORT (1u << sym_import)
+#define SYMBOL_MASK_EXPORT (1u << sym_export)
+#define SYMBOL_MASK_SYMBOL (1u << sym_symbol)
+#define SYMBOL_MASK_ALL (SYMBOL_MASK_IMPORT | SYMBOL_MASK_EXPORT | SYMBOL_MASK_SYMBOL)
+
 typedef enum
 {
     mod_user,
@@ -548,6 +557,13 @@ typedef MEMORY_SIZE VALUE_SIZE;
 
 typedef struct DBGFUNCTIONS_ DBGFUNCTIONS;
 
+// Callback declaration:
+// bool cbSymbolEnum(const SYMBOLPTR* symbol, void* user);
+// To get the data from the opaque pointer:
+// SYMBOLINFO info;
+// DbgGetSymbolInfo(symbol, &info);
+// The SYMBOLPTR* becomes invalid when the module is unloaded
+// DO NOT STORE unless you are absolutely certain you handle it correctly
 typedef bool (*CBSYMBOLENUM)(const struct SYMBOLPTR_* symbol, void* user);
 
 //Debugger structs
@@ -637,10 +653,40 @@ typedef struct SYMBOLINFO_
     char* decoratedSymbol;
     char* undecoratedSymbol;
     SYMBOLTYPE type;
+
+    // If true: Use BridgeFree(decoratedSymbol) to deallocate
+    // Else: The decoratedSymbol pointer is valid until the module unloads
     bool freeDecorated;
+
+    // If true: Use BridgeFree(undecoratedSymbol) to deallcoate
+    // Else: The undecoratedSymbol pointer is valid until the module unloads
     bool freeUndecorated;
+
+    // The entry point pseudo-export has ordinal == 0 (invalid ordinal value)
     DWORD ordinal;
 } SYMBOLINFO;
+
+#ifdef __cplusplus
+struct SYMBOLINFOCPP : SYMBOLINFO
+{
+    SYMBOLINFOCPP(const SYMBOLINFOCPP &) = delete;
+    SYMBOLINFOCPP(SYMBOLINFOCPP &&) = delete;
+
+    SYMBOLINFOCPP()
+    {
+        memset(this, 0, sizeof(SYMBOLINFO));
+    }
+
+    ~SYMBOLINFOCPP()
+    {
+        if(freeDecorated)
+            BridgeFree(decoratedSymbol);
+        if(freeUndecorated)
+            BridgeFree(undecoratedSymbol);
+    }
+};
+static_assert(sizeof(SYMBOLINFOCPP) == sizeof(SYMBOLINFO), "");
+#endif // __cplusplus
 
 typedef struct
 {
@@ -653,6 +699,9 @@ typedef struct
     duint base;
     CBSYMBOLENUM cbSymbolEnum;
     void* user;
+    duint start;
+    duint end;
+    unsigned int symbolMask;
 } SYMBOLCBINFO;
 
 typedef struct
@@ -940,6 +989,12 @@ typedef struct
     XREF_RECORD* references;
 } XREF_INFO;
 
+typedef struct
+{
+    duint address;
+    duint from;
+} XREF_EDGE;
+
 typedef struct SYMBOLPTR_
 {
     duint modbase;
@@ -1008,8 +1063,9 @@ BRIDGE_IMPEXP void DbgScriptAbort();
 BRIDGE_IMPEXP SCRIPTLINETYPE DbgScriptGetLineType(int line);
 BRIDGE_IMPEXP void DbgScriptSetIp(int line);
 BRIDGE_IMPEXP bool DbgScriptGetBranchInfo(int line, SCRIPTBRANCH* info);
-BRIDGE_IMPEXP void DbgSymbolEnum(duint base, CBSYMBOLENUM cbSymbolEnum, void* user);
-BRIDGE_IMPEXP void DbgSymbolEnumFromCache(duint base, CBSYMBOLENUM cbSymbolEnum, void* user);
+BRIDGE_IMPEXP bool DbgSymbolEnum(duint base, CBSYMBOLENUM cbSymbolEnum, void* user);
+BRIDGE_IMPEXP bool DbgSymbolEnumFromCache(duint base, CBSYMBOLENUM cbSymbolEnum, void* user);
+BRIDGE_IMPEXP bool DbgSymbolEnumRange(duint start, duint end, unsigned int symbolMask, CBSYMBOLENUM cbSymbolEnum, void* user);
 BRIDGE_IMPEXP bool DbgAssembleAt(duint addr, const char* instruction);
 BRIDGE_IMPEXP duint DbgModBaseFromName(const char* name);
 BRIDGE_IMPEXP void DbgDisasmAt(duint addr, DISASM_INSTR* instr);
@@ -1072,6 +1128,7 @@ BRIDGE_IMPEXP duint DbgEval(const char* expression, bool* DEFAULT_PARAM(success,
 BRIDGE_IMPEXP void DbgGetSymbolInfo(const SYMBOLPTR* symbolptr, SYMBOLINFO* info);
 BRIDGE_IMPEXP DEBUG_ENGINE DbgGetDebugEngine();
 BRIDGE_IMPEXP bool DbgGetSymbolInfoAt(duint addr, SYMBOLINFO* info);
+BRIDGE_IMPEXP duint DbgXrefAddMulti(const XREF_EDGE* edges, duint count);
 
 //Gui defines
 typedef enum
@@ -1095,6 +1152,7 @@ typedef enum
     GUI_GRAPH,
     GUI_MEMMAP,
     GUI_SYMMOD,
+    GUI_THREADS,
 } GUISELECTIONTYPE;
 
 #define GUI_MAX_LINE_SIZE 65536
@@ -1220,6 +1278,11 @@ typedef enum
     GUI_GET_MAIN_THREAD_ID,         // param1=unused,               param2=unused
     GUI_ADD_MSG_TO_LOG_HTML,        // param1=(const char*)msg,     param2=unused
     GUI_IS_LOG_ENABLED,             // param1=unused,               param2=unused
+    GUI_IS_DEBUGGER_FOCUSED_UNUSED,        // This message is removed, could be used for future purposes
+    GUI_SAVE_LOG,                   // param1=const char* file name,param2=unused
+    GUI_REDIRECT_LOG,               // param1=const char* file name,param2=unused
+    GUI_STOP_REDIRECT_LOG,          // param1=unused,               param2=unused
+    GUI_SHOW_THREADS,               // param1=unused,               param2=unused
 } GUIMSG;
 
 //GUI Typedefs
@@ -1289,6 +1352,9 @@ BRIDGE_IMPEXP void GuiSetDebugStateFast(DBGSTATE state);
 BRIDGE_IMPEXP void GuiAddLogMessage(const char* msg);
 BRIDGE_IMPEXP void GuiAddLogMessageHtml(const char* msg);
 BRIDGE_IMPEXP void GuiLogClear();
+BRIDGE_IMPEXP void GuiLogSave(const char* filename);
+BRIDGE_IMPEXP void GuiLogRedirect(const char* filename);
+BRIDGE_IMPEXP void GuiLogRedirectStop();
 BRIDGE_IMPEXP void GuiUpdateAllViews();
 BRIDGE_IMPEXP void GuiUpdateRegisterView();
 BRIDGE_IMPEXP void GuiUpdateDisassemblyView();
@@ -1359,6 +1425,7 @@ BRIDGE_IMPEXP void GuiMenuSetName(int hMenu, const char* name);
 BRIDGE_IMPEXP void GuiMenuSetEntryName(int hEntry, const char* name);
 BRIDGE_IMPEXP void GuiMenuSetEntryHotkey(int hEntry, const char* hack);
 BRIDGE_IMPEXP void GuiShowCpu();
+BRIDGE_IMPEXP void GuiShowThreads();
 BRIDGE_IMPEXP void GuiAddQWidgetTab(void* qWidget);
 BRIDGE_IMPEXP void GuiShowQWidgetTab(void* qWidget);
 BRIDGE_IMPEXP void GuiCloseQWidgetTab(void* qWidget);

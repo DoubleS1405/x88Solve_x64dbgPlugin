@@ -47,6 +47,14 @@ using namespace std;
 #define REG_EDI_8H (3*7)+1
 #define REG_EDI_8L (3*7)+2
 
+#define REG_ZFLAG (3*8)+0
+#define REG_SFLAG (3*8)+1
+#define REG_OFLAG (3*8)+2
+#define REG_CFLAG (3*9)+0
+#define REG_PFLAG (3*9)+1
+
+#define REG_EIP (3*10)+0
+
 class OPERAND;
 class IR;
 extern DWORD cntd;
@@ -67,8 +75,13 @@ public:
 	std::string Name;
 	bool isHiddenRHS = false;
 	bool isTainted = false;
+	bool isEflags= false;
 
 	shared_ptr<BTreeNode> ast;
+	// z3::expr (z3::ast를 상속 받음) 포인터를 저장해야 함
+	// 1. IR의 OPR 별로 z3::expr을 생성
+	// 2. Register에 대한 Value 초기화 세팅 시 Symbolize 할 레지스터의 Value에 대해서 bitvector const 생성
+	z3::expr* z3ExprPtr = nullptr;
 
 	Value();
 
@@ -99,7 +112,14 @@ public:
 		OPR_NONE,
 		OPR_CONCAT,
 		OPR_EXTRACT,
+		OPR_EXTRACTSF64,
+		OPR_EXTRACTSF32,
+		OPR_EXTRACTSF16,
+		OPR_EXTRACTSF8,
+		OPR_EXTRACT32H,
+		OPR_EXTRACT32L,
 		OPR_EXTRACT16H,
+		OPR_EXTRACT16L,
 		OPR_EXTRACT8HH,
 		OPR_EXTRACT8HL,
 		OPR_EXTRACT8H,
@@ -113,24 +133,31 @@ public:
 		OPR_STORE,
 		OPR_LOAD,
 		OPR_ADD,
+		OPR_ADDFLAG,
 		OPR_ADC,
 		OPR_SUB,
 		OPR_MUL,
+		OPR_SDIV,
+		OPR_SREM,
+		OPR_UDIV,
+		OPR_UREM,
 		OPR_AND,
 		OPR_OR,
 		OPR_XOR,
 		OPR_NOT,
+		OPR_NEG,
 		OPR_BT,
 		OPR_BTC,
 		OPR_BSF,
 		OPR_BSWAP,
+		OPR_ITE,
+		OPR_ISEQUAL,
 		OPR_RCL,
-		OPR_RCR,
-		OPR_ROL,
-		OPR_ROR,
+		OPR_RCR,		
 		OPR_SAR,
 		OPR_SHL,
 		OPR_SHR,
+		OPR_BRC
 	};
 	OPR opr;
 	vector<OPERAND*> Operands;
@@ -163,6 +190,8 @@ public:
 //#define DEBUG
 	IR(OPR _opr, Value* op1, Value* op2, Value* op3, Value* op4);
 	string printOpr(OPR _opr);
+
+	void CreateZ3Expr(IR* _irPtr);
 };
 
 class ConstInt : public IR
@@ -203,11 +232,11 @@ IR* CreateSubIR(Value* op1, Value* op2);
 
 IR* CraeteStoreIR(Value* op1, Value* op2, IR::OPR _opr);
 
-IR* CraeteBVVIR(DWORD intVal, BYTE size);
+IR* CreateBVVIR(DWORD intVal, BYTE size);
 
-IR* CraeteZeroExtendIR(Value* _val, BYTE size, vector<IR*>& irList);
+IR* CreateZeroExtendIR(Value* _val, BYTE toExtendSize, BYTE size, vector<IR*>& irList);
 
-IR* CraeteSignExtendIR(Value* _val, BYTE size, vector<IR*>& irList);
+IR* CreateSignExtendIR(Value* _val, BYTE _toExtendSize, BYTE _currentSize, vector<IR*>& irList);
 
 int CreateIR(ZydisDecodedInstruction* ptr_di, ZydisDecodedOperand* operandPTr, REGDUMP& regdump, DWORD _offset);
 
