@@ -33,6 +33,9 @@
     <Filter Include="Library Files">
       <UniqueIdentifier>{83b94fba-0963-43a4-b8bd-12730a208fad}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\CFG">
+      <UniqueIdentifier>{957ae91f-5aac-4fac-8089-5e8aef841d2c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pluginsdk\dbghelp\dbghelp.h">
@@ -149,6 +152,9 @@
     <ClInclude Include="optimize.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="graph.h">
+      <Filter>Source Files\CFG</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Library Include="pluginsdk\x32bridge.lib">
@@ -209,6 +215,9 @@
     </ClCompile>
     <ClCompile Include="optimize.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="graph.cpp">
+      <Filter>Source Files\CFG</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

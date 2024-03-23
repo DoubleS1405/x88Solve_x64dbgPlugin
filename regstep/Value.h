@@ -135,6 +135,7 @@ public:
 		OPR_ADD,
 		OPR_ADDFLAG,
 		OPR_ADC,
+		OPR_SBB,
 		OPR_SUB,
 		OPR_MUL,
 		OPR_SDIV,

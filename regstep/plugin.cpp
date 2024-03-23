@@ -31,6 +31,8 @@ DWORD cntd = 0;
 
 DWORD testNodeCnt = 0;
 
+void CreateCFG(DWORD _address);
+
 enum
 {
 	MENU_ENABLED,
@@ -47,6 +49,8 @@ static bool regstepEnabled = true;
 ZydisDecoder Decoder;
 duint StartAddress;
 duint EndAddress;
+
+bool isLastRegValue(Value* temIrPtr);
 
 void printIRStatic2(StaticIR* _irPtr)
 {
@@ -740,7 +744,8 @@ void dfs(BridgeCFGraph cfg)
 PLUG_EXPORT void CBANALYZE(CBTYPE cbType, PLUG_CB_ANALYZE* info)
 {
 	bool isInExit = false;
-	auto graph = BridgeCFGraph(&info->graph, true);
+	auto graph = BridgeCFGraph(&info->graph, true);	
+
 	std::vector<duint> toRemoveExits;
 	for (int i = 0; i <= graph.nodes.size(); i++)
 	{
@@ -847,11 +852,11 @@ PLUG_EXPORT void CBANALYZE(CBTYPE cbType, PLUG_CB_ANALYZE* info)
 		toRemoveExits.clear();
 	}
 
-	if (graph.nodes.size() == 1)
+	//if (graph.nodes.size() == 1)
 	{
 		//_plugin_logprintf("Opttimized to 1 Block\n");
 
-
+		/*
 		DWORD beforeCnt = 0;
 		DWORD afterCnt = 0;
 		for (auto& nodeIt = graph.nodes.begin(); nodeIt != graph.nodes.end(); nodeIt++)
@@ -861,6 +866,7 @@ PLUG_EXPORT void CBANALYZE(CBTYPE cbType, PLUG_CB_ANALYZE* info)
 				beforeCnt++;
 			}
 		}
+		*/
 
 		ZydisDecodedInstruction DecodedInst;
 		ZydisDecodedOperand DecodedOperand[5];
@@ -868,15 +874,18 @@ PLUG_EXPORT void CBANALYZE(CBTYPE cbType, PLUG_CB_ANALYZE* info)
 
 		for (auto nodeIt = graph.nodes.begin(); nodeIt != graph.nodes.end(); nodeIt++)
 		{
-			//_plugin_logprintf("----------------------------------------\n");
-			for (auto instIt : nodeIt->second.instrs)
+			if (nodeIt->first == graph.entryPoint)
 			{
-				ZydisDecoderDecodeFull(&Decoder, instIt.data, 15, &DecodedInst, DecodedOperand,
-					ZYDIS_MAX_OPERAND_COUNT_VISIBLE, ZYDIS_DFLAG_VISIBLE_OPERANDS_ONLY);
-				//_plugin_logprintf("[%p] %s\n", instIt.addr, ZydisMnemonicGetString(DecodedInst.mnemonic));
-				CreateStaticIR(&DecodedInst, DecodedOperand, instIt.addr, IRList);
+				//_plugin_logprintf("----------------------------------------\n");
+				for (auto instIt : nodeIt->second.instrs)
+				{
+					ZydisDecoderDecodeFull(&Decoder, instIt.data, 15, &DecodedInst, DecodedOperand,
+						ZYDIS_MAX_OPERAND_COUNT_VISIBLE, ZYDIS_DFLAG_VISIBLE_OPERANDS_ONLY);
+					//_plugin_logprintf("[%p] %s\n", instIt.addr, ZydisMnemonicGetString(DecodedInst.mnemonic));
+					CreateStaticIR(&DecodedInst, DecodedOperand, instIt.addr, IRList);
+				}
+				//_plugin_logprintf("----------------------------------------\n");
 			}
-			//_plugin_logprintf("----------------------------------------\n");
 		}
 
 		// Optimize
@@ -890,7 +899,7 @@ PLUG_EXPORT void CBANALYZE(CBTYPE cbType, PLUG_CB_ANALYZE* info)
 				for (auto& instIter = irIter->second.begin(); instIter != irIter->second.end();)
 				{
 					StaticIR* temIrPtr = dynamic_cast<StaticIR*>(*instIter);
-					if (temIrPtr->UseList.size() == 0 &&
+					if (temIrPtr !=nullptr && temIrPtr->UseList.size() == 0 &&
 						temIrPtr->isHiddenRHS != true &&
 						(temIrPtr != RegValue2[REG_EAX_16H].back() && temIrPtr != RegValue2[REG_EAX_8H].back() && temIrPtr != RegValue2[REG_EAX_8L].back() &&
 							temIrPtr != RegValue2[REG_EBX_16H].back() && temIrPtr != RegValue2[REG_EBX_8H].back() && temIrPtr != RegValue2[REG_EBX_8L].back() &&
@@ -899,7 +908,9 @@ PLUG_EXPORT void CBANALYZE(CBTYPE cbType, PLUG_CB_ANALYZE* info)
 							temIrPtr != RegValue2[REG_EDI_16H].back() && temIrPtr != RegValue2[REG_EDI_8H].back() && temIrPtr != RegValue2[REG_EDI_8L].back() &&
 							temIrPtr != RegValue2[REG_ESI_16H].back() && temIrPtr != RegValue2[REG_ESI_8H].back() && temIrPtr != RegValue2[REG_ESI_8L].back() &&
 							temIrPtr != RegValue2[REG_EBP_16H].back() && temIrPtr != RegValue2[REG_EBP_8H].back() && temIrPtr != RegValue2[REG_EBP_8L].back() &&
-							temIrPtr != RegValue2[REG_ESP_16H].back() && temIrPtr != RegValue2[REG_ESP_8H].back() && temIrPtr != RegValue2[REG_ESP_8L].back()))
+							temIrPtr != RegValue2[REG_ESP_16H].back() && temIrPtr != RegValue2[REG_ESP_8H].back() && temIrPtr != RegValue2[REG_ESP_8L].back() &&
+							temIrPtr != RegValue2[REG_SFLAG].back() && temIrPtr != RegValue2[REG_ZFLAG].back() && temIrPtr != RegValue2[REG_CFLAG].back() && 
+							temIrPtr != RegValue2[REG_PFLAG].back() && temIrPtr != RegValue2[REG_OFLAG].back()))
 					{
 						// 제거하려는 Value를 UseList로 가지는 오퍼랜드가 존재하면 UseList에서 제거
 						for (int i = 0; i < temIrPtr->Operands.size(); i++)
@@ -971,6 +982,7 @@ PLUG_EXPORT void CBANALYZE(CBTYPE cbType, PLUG_CB_ANALYZE* info)
 			}
 		}
 
+		/*
 		for (auto& nodeIt = graph.nodes.begin(); nodeIt != graph.nodes.end(); nodeIt++)
 		{
 			for (auto& instIter = nodeIt->second.instrs.begin(); instIter != nodeIt->second.instrs.end(); instIter++)
@@ -978,6 +990,21 @@ PLUG_EXPORT void CBANALYZE(CBTYPE cbType, PLUG_CB_ANALYZE* info)
 				afterCnt++;
 			}
 		}
+		*/
+
+		/*
+		for (auto tet : IRList)
+		{
+			if (tet.first == 0x00226D6B)
+			{
+				for (auto& dg : tet.second)
+				{					
+					_plugin_logprintf("Use Count :%d\n", dg->UseList.size());
+					printIRStatic2(dg);
+				}
+			}
+		}
+		*/
 
 		//_plugin_logprintf("Before :%d, After %d\n", beforeCnt, afterCnt);
 	}
@@ -985,7 +1012,8 @@ PLUG_EXPORT void CBANALYZE(CBTYPE cbType, PLUG_CB_ANALYZE* info)
 
 	info->graph = graph.ToGraphList();
 }
-
+set<duint> HandlerList;
+set<duint> HandlerList2;
 bool isGenerateCFG = false;
 PLUG_EXPORT void CBTRACEEXECUTE(CBTYPE cbType, PLUG_CB_TRACEEXECUTE* info)
 {
@@ -1028,6 +1056,7 @@ PLUG_EXPORT void CBTRACEEXECUTE(CBTYPE cbType, PLUG_CB_TRACEEXECUTE* info)
 	{
 		BridgeCFGraphList bcl;
 		DbgAnalyzeFunction(info->cip, &bcl);
+		HandlerList.insert(info->cip);
 	}
 
 	DbgMemRead(info->cip, buf, 15);
@@ -1039,9 +1068,11 @@ PLUG_EXPORT void CBTRACEEXECUTE(CBTYPE cbType, PLUG_CB_TRACEEXECUTE* info)
 	CreateIR(&DecodedInst, DecodedOperand, regdump, info->cip);
 
 	if (DecodedInst.mnemonic == ZYDIS_MNEMONIC_RET ||
-		((DecodedInst.mnemonic == ZYDIS_MNEMONIC_JMP) && (DecodedOperand[0].type != ZYDIS_OPERAND_TYPE_IMMEDIATE)))
+		((DecodedInst.mnemonic == ZYDIS_MNEMONIC_JMP) && (DecodedOperand[0].type != ZYDIS_OPERAND_TYPE_IMMEDIATE)) ||
+		(DecodedInst.mnemonic == ZYDIS_MNEMONIC_CALL))
 	{
 		isGenerateCFG = true;
+		//CreateCFG(info->cip);
 	}
 	else
 		isGenerateCFG = false;
@@ -1065,12 +1096,20 @@ PLUG_EXPORT void CBBREAKPOINT(CBTYPE cbType, PLUG_CB_BREAKPOINT* info)
 
 	_plugin_logprintf("After DSE IRList.size() %d \n", IRList.size());
 
+	DWORD currentHandler;
+
+	/*
 	for (auto it1 : IRList)
 	{
+		
+		if (HandlerList.find(it1.first) != HandlerList.end())
+		{
+			currentHandler = it1.first;
+		}
 		//_plugin_logprintf("--------------------------------\n");
 		for (auto it : it1.second)
-		{
-			if(it->isTainted)
+		{		
+			//if(it->isTainted || isLastRegValue(it))
 			{
 				_plugin_logprintf("--------------------------------\n");
 				if (it == nullptr)
@@ -1091,9 +1130,21 @@ PLUG_EXPORT void CBBREAKPOINT(CBTYPE cbType, PLUG_CB_BREAKPOINT* info)
 
 					if (it->z3ExprPtr)
 					{
+						if (it->z3ExprPtr->decl().name().str().compare("concat") != 0
+							&& it->z3ExprPtr->decl().name().str().compare("extract") != 0)
+						{
+							if (it->z3ExprPtr->decl().name().str().find("REG_") == string::npos)
+							{
+								if (it->isTainted)
+								{
+									HandlerList2.insert(currentHandler);
+									_plugin_logprintf("[%p] add HandlerList2 %p test %s %s \n", it1.first, currentHandler, it->z3ExprPtr->to_string().c_str(), it->z3ExprPtr->decl().name().str().c_str());
+								}
+							}
+						}
 						auto sim = it->z3ExprPtr->simplify();
 						//_plugin_logprintf("[%p] z3: %s\n", it1.first, it->z3ExprPtr->to_string().c_str());
-						_plugin_logprintf("[%p] z3 sim: %s\n", it1.first, sim.to_string().c_str());
+						//_plugin_logprintf("[%p] z3 sim: %s\n", it1.first, sim.to_string().c_str());
 					}
 				}
 				_plugin_logprintf("--------------------------------\n");
@@ -1101,6 +1152,7 @@ PLUG_EXPORT void CBBREAKPOINT(CBTYPE cbType, PLUG_CB_BREAKPOINT* info)
 		}
 		//_plugin_logprintf("--------------------------------\n");
 	}
+	*/
 
 	/*
 	for (auto it1 : IRList)
@@ -1117,6 +1169,12 @@ PLUG_EXPORT void CBBREAKPOINT(CBTYPE cbType, PLUG_CB_BREAKPOINT* info)
 		_plugin_logprintf("--------------------------------\n");
 	}
 	*/
+
+	for (auto it2 : HandlerList2)
+	{
+		
+		_plugin_logprintf("[Handler List] %p\n", it2);
+	}
 }
 
 PLUG_EXPORT void CBCREATEPROCESS(CBTYPE ctype, PLUG_CB_CREATEPROCESS* info)
@@ -1155,63 +1213,378 @@ PLUG_EXPORT void CBCREATEPROCESS(CBTYPE ctype, PLUG_CB_CREATEPROCESS* info)
 
 	initStaticIR();
 
-	Value* testValue1 = new Value("MEM1", 0);
-	testValue1->ast = std::make_shared<BTreeNode>(MakeBTreeNode(testValue1->Name));
-	testValue1->ast->m_NodeType = NT_SYMVAR;
-	testValue1->Size = 8;
-	testValue1->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM1", 8));
-	MemValue[0x00C25018].push_back(testValue1);
+	Value* dkdkdkdkdkdk = new Value("MEM1", 0);
+	dkdkdkdkdkdk->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dkdkdkdkdkdk->Name));
+	dkdkdkdkdkdk->ast->m_NodeType = NT_SYMVAR;
+	dkdkdkdkdkdk->Size = 8;
+	dkdkdkdkdkdk->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM1", 8));
+	MemValue[StartAddress + 0x336C].push_back(dkdkdkdkdkdk);
 
-	Value* testValue2 = new Value("MEM2", 0);
-	testValue2->ast = std::make_shared<BTreeNode>(MakeBTreeNode(testValue2->Name));
-	testValue2->ast->m_NodeType = NT_SYMVAR;
-	testValue2->Size = 8;
-	testValue2->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM2", 8));
-	MemValue[0x00C25019].push_back(testValue2);
+	Value* dk2 = new Value("MEM2", 0);
+	dk2->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk2->Name));
+	dk2->ast->m_NodeType = NT_SYMVAR;
+	dk2->Size = 8;
+	dk2->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM2", 8));
+	MemValue[StartAddress + 0x336d].push_back(dk2);
 
-	Value* testValue3 = new Value("MEM3", 0);
-	testValue3->ast = std::make_shared<BTreeNode>(MakeBTreeNode(testValue3->Name));
-	testValue3->ast->m_NodeType = NT_SYMVAR;
-	testValue3->Size = 8;
-	testValue3->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM3", 8));
-	MemValue[0x00C2501a].push_back(testValue3);
+	Value* dk3 = new Value("MEM3", 0);
+	dk3->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk3->Name));
+	dk3->ast->m_NodeType = NT_SYMVAR;
+	dk3->Size = 8;
+	dk3->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM3", 8));
+	MemValue[StartAddress + 0x336e].push_back(dk3);
 
-	Value* testValue4 = new Value("MEM4", 0);
-	testValue4->ast = std::make_shared<BTreeNode>(MakeBTreeNode(testValue4->Name));
-	testValue4->ast->m_NodeType = NT_SYMVAR;
-	testValue4->Size = 8;
-	testValue4->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM4", 8));
-	MemValue[0x00C2501b].push_back(testValue4);
+	Value* dk4 = new Value("MEM4", 0);
+	dk4->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk4->Name));
+	dk4->ast->m_NodeType = NT_SYMVAR;
+	dk4->Size = 8;
+	dk4->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM4", 8));
+	MemValue[StartAddress + 0x336f].push_back(dk4);
 
-	Value* tstValue1 = new Value("MEM1", 0);
-	tstValue1->ast = std::make_shared<BTreeNode>(MakeBTreeNode(tstValue1->Name));
-	tstValue1->ast->m_NodeType = NT_SYMVAR;
-	tstValue1->Size = 8;
-	tstValue1->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM5", 8));
-	MemValue[0x00C25030].push_back(tstValue1);
+	Value* dk5 = new Value("MEM5", 0);
+	dk5->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk5->Name));
+	dk5->ast->m_NodeType = NT_SYMVAR;
+	dk5->Size = 8;
+	dk5->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM5", 8));
+	MemValue[StartAddress + 0x3370].push_back(dk5);
 
-	Value* tstValue2 = new Value("MEM2", 0);
-	tstValue2->ast = std::make_shared<BTreeNode>(MakeBTreeNode(tstValue2->Name));
-	tstValue2->ast->m_NodeType = NT_SYMVAR;
-	tstValue2->Size = 8;
-	tstValue2->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM6", 8));
-	MemValue[0x00C25031].push_back(tstValue2);
+	Value* dk6 = new Value("MEM6", 0);
+	dk6->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk6->Name));
+	dk6->ast->m_NodeType = NT_SYMVAR;
+	dk6->Size = 8;
+	dk6->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM6", 8));
+	MemValue[StartAddress + 0x3371].push_back(dk6);
 
-	Value* tstValue3 = new Value("MEM3", 0);
-	tstValue3->ast = std::make_shared<BTreeNode>(MakeBTreeNode(tstValue3->Name));
-	tstValue3->ast->m_NodeType = NT_SYMVAR;
-	tstValue3->Size = 8;
-	tstValue3->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM7", 8));
-	MemValue[0x00C25032].push_back(tstValue3);
+	Value* dk7 = new Value("MEM7", 0);
+	dk7->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk7->Name));
+	dk7->ast->m_NodeType = NT_SYMVAR;
+	dk7->Size = 8;
+	dk7->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM7", 8));
+	MemValue[StartAddress + 0x3372].push_back(dk7);
 
-	Value* tstValue4 = new Value("MEM4", 0);
-	tstValue4->ast = std::make_shared<BTreeNode>(MakeBTreeNode(tstValue4->Name));
-	tstValue4->ast->m_NodeType = NT_SYMVAR;
-	tstValue4->Size = 8;
-	tstValue4->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM8", 8));
-	MemValue[0x00C2533].push_back(tstValue4);
+	Value* dk8 = new Value("MEM8", 0);
+	dk8->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk8->Name));
+	dk8->ast->m_NodeType = NT_SYMVAR;
+	dk8->Size = 8;
+	dk8->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM8", 8));
+	MemValue[StartAddress + 0x3373].push_back(dk8);
 
+	Value* dk9 = new Value("MEM9", 0);
+	dk9->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk9->Name));
+	dk9->ast->m_NodeType = NT_SYMVAR;
+	dk9->Size = 8;
+	dk9->z3ExprPtr = new z3::expr(z3Context->bv_const("MEM9", 8));
+	MemValue[StartAddress + 0x3374].push_back(dk9);
 
+	Value* dka = new Value("MEMA", 0);
+	dka->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dka->Name));
+	dka->ast->m_NodeType = NT_SYMVAR;
+	dka->Size = 8;
+	dka->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA", 8));
+	MemValue[StartAddress + 0x3375].push_back(dka);
+
+	Value* dkb = new Value("MEMB", 0);
+	dkb->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dkb->Name));
+	dkb->ast->m_NodeType = NT_SYMVAR;
+	dkb->Size = 8;
+	dkb->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMB", 8));
+	MemValue[StartAddress + 0x3376].push_back(dkb);
+
+	Value* dkc = new Value("MEMC", 0);
+	dkc->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dkc->Name));
+	dkc->ast->m_NodeType = NT_SYMVAR;
+	dkc->Size = 8;
+	dkc->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMC", 8));
+	MemValue[StartAddress + 0x3377].push_back(dkc);
+
+	Value* dkd = new Value("MEMD", 0);
+	dkd->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dkd->Name));
+	dkd->ast->m_NodeType = NT_SYMVAR;
+	dkd->Size = 8;
+	dkd->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMD", 8));
+	MemValue[StartAddress + 0x3378].push_back(dkd);
+
+	Value* dke = new Value("MEME", 0);
+	dke->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dke->Name));
+	dke->ast->m_NodeType = NT_SYMVAR;
+	dke->Size = 8;
+	dke->z3ExprPtr = new z3::expr(z3Context->bv_const("MEME", 8));
+	MemValue[StartAddress + 0x3379].push_back(dke);
+
+	Value* dkf = new Value("MEMF", 0);
+	dkf->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dkf->Name));
+	dkf->ast->m_NodeType = NT_SYMVAR;
+	dkf->Size = 8;
+	dkf->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMF", 8));
+	MemValue[StartAddress + 0x337A].push_back(dkf);
+
+	Value* dk10 = new Value("MEM10", 0);
+	dk10->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk10->Name));
+	dk10->ast->m_NodeType = NT_SYMVAR;
+	dk10->Size = 8;
+	dk10->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA10", 8));
+	MemValue[StartAddress + 0x337B].push_back(dk10);
+
+	Value* dk11 = new Value("MEM11", 0);
+	dk11->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk11->Name));
+	dk11->ast->m_NodeType = NT_SYMVAR;
+	dk11->Size = 8;
+	dk11->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA11", 8));
+	MemValue[StartAddress + 0x337C].push_back(dk11);
+
+	Value* dk12 = new Value("MEM12", 0);
+	dk12->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk12->Name));
+	dk12->ast->m_NodeType = NT_SYMVAR;
+	dk12->Size = 8;
+	dk12->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA12", 8));
+	MemValue[StartAddress + 0x337D].push_back(dk12);
+
+	Value* dk13 = new Value("MEM13", 0);
+	dk13->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk13->Name));
+	dk13->ast->m_NodeType = NT_SYMVAR;
+	dk13->Size = 8;
+	dk13->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA13", 8));
+	MemValue[StartAddress + 0x337E].push_back(dk13);
+
+	Value* dk14 = new Value("MEM14", 0);
+	dk14->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk14->Name));
+	dk14->ast->m_NodeType = NT_SYMVAR;
+	dk14->Size = 8;
+	dk14->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA14", 8));
+	MemValue[StartAddress + 0x337F].push_back(dk14);
+
+	Value* dk15 = new Value("MEM15", 0);
+	dk15->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk15->Name));
+	dk15->ast->m_NodeType = NT_SYMVAR;
+	dk15->Size = 8;
+	dk15->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA15", 8));
+	MemValue[StartAddress + 0x3380].push_back(dk15);
+
+	Value* dk16 = new Value("MEM16", 0);
+	dk16->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk16->Name));
+	dk16->ast->m_NodeType = NT_SYMVAR;
+	dk16->Size = 8;
+	dk16->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA16", 8));
+	MemValue[StartAddress + 0x3381].push_back(dk16);
+
+	Value* dk17 = new Value("MEM17", 0);
+	dk17->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk17->Name));
+	dk17->ast->m_NodeType = NT_SYMVAR;
+	dk17->Size = 8;
+	dk17->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA17", 8));
+	MemValue[StartAddress + 0x3382].push_back(dk17);
+
+	Value* dk18 = new Value("MEM18", 0);
+	dk18->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk18->Name));
+	dk18->ast->m_NodeType = NT_SYMVAR;
+	dk18->Size = 8;
+	dk18->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA18", 8));
+	MemValue[StartAddress + 0x3383].push_back(dk18);
+
+	Value* dk19 = new Value("MEM19", 0);
+	dk19->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk19->Name));
+	dk19->ast->m_NodeType = NT_SYMVAR;
+	dk19->Size = 8;
+	dk19->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA19", 8));
+	MemValue[StartAddress + 0x3384].push_back(dk19);
+
+	Value* dk1a = new Value("MEM1A", 0);
+	dk1a->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk1a->Name));
+	dk1a->ast->m_NodeType = NT_SYMVAR;
+	dk1a->Size = 8;
+	dk1a->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA1A", 8));
+	MemValue[StartAddress + 0x3385].push_back(dk1a);
+
+	Value* dk1b = new Value("MEM1B", 0);
+	dk1b->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk1b->Name));
+	dk1b->ast->m_NodeType = NT_SYMVAR;
+	dk1b->Size = 8;
+	dk1b->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA1B", 8));
+	MemValue[StartAddress + 0x3386].push_back(dk1b);
+
+	Value* dk1c = new Value("MEM1C", 0);
+	dk1c->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk1c->Name));
+	dk1c->ast->m_NodeType = NT_SYMVAR;
+	dk1c->Size = 8;
+	dk1c->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA1C", 8));
+	MemValue[StartAddress + 0x3387].push_back(dk1c);
+
+	Value* dk1d = new Value("MEM1D", 0);
+	dk1d->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk1d->Name));
+	dk1d->ast->m_NodeType = NT_SYMVAR;
+	dk1d->Size = 8;
+	dk1d->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA1D", 8));
+	MemValue[StartAddress + 0x3388].push_back(dk1d);
+
+	Value* dk1e = new Value("MEM1E", 0);
+	dk1e->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk1e->Name));
+	dk1e->ast->m_NodeType = NT_SYMVAR;
+	dk1e->Size = 8;
+	dk1e->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA1E", 8));
+	MemValue[StartAddress + 0x3389].push_back(dk1e);
+
+	Value* dk1f = new Value("MEM1F", 0);
+	dk1f->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk1f->Name));
+	dk1f->ast->m_NodeType = NT_SYMVAR;
+	dk1f->Size = 8;
+	dk1f->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA1F", 8));
+	MemValue[StartAddress + 0x338A].push_back(dk1f);
+
+	Value* dk20 = new Value("MEM20", 0);
+	dk20->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk20->Name));
+	dk20->ast->m_NodeType = NT_SYMVAR;
+	dk20->Size = 8;
+	dk20->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA20", 8));
+	MemValue[StartAddress + 0x338B].push_back(dk20);
+
+	Value* dk21 = new Value("MEM21", 0);
+	dk21->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk21->Name));
+	dk21->ast->m_NodeType = NT_SYMVAR;
+	dk21->Size = 8;
+	dk21->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA21", 8));
+	MemValue[StartAddress + 0x338C].push_back(dk21);
+
+	Value* dk22 = new Value("MEM22", 0);
+	dk22->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk22->Name));
+	dk22->ast->m_NodeType = NT_SYMVAR;
+	dk22->Size = 8;
+	dk22->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA22", 8));
+	MemValue[StartAddress + 0x338D].push_back(dk22);
+
+	Value* dk23 = new Value("ME23", 0);
+	dk23->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk23->Name));
+	dk23->ast->m_NodeType = NT_SYMVAR;
+	dk23->Size = 8;
+	dk23->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA23", 8));
+	MemValue[StartAddress + 0x338E].push_back(dk23);
+
+	Value* dk24 = new Value("MEM24", 0);
+	dk24->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk24->Name));
+	dk24->ast->m_NodeType = NT_SYMVAR;
+	dk24->Size = 8;
+	dk24->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA24", 8));
+	MemValue[StartAddress + 0x338F].push_back(dk24);
+
+	Value* dk25 = new Value("MEM25", 0);
+	dk25->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk25->Name));
+	dk25->ast->m_NodeType = NT_SYMVAR;
+	dk25->Size = 8;
+	dk25->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA25", 8));
+	MemValue[StartAddress + 0x3390].push_back(dk25);
+
+	Value* dk26 = new Value("MEM26", 0);
+	dk26->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk26->Name));
+	dk26->ast->m_NodeType = NT_SYMVAR;
+	dk26->Size = 8;
+	dk26->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA26", 8));
+	MemValue[StartAddress + 0x3391].push_back(dk26);
+
+	Value* dk27 = new Value("MEM27", 0);
+	dk27->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk27->Name));
+	dk27->ast->m_NodeType = NT_SYMVAR;
+	dk27->Size = 8;
+	dk27->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA27", 8));
+	MemValue[StartAddress + 0x3392].push_back(dk27);
+
+	Value* dk28 = new Value("MEM28", 0);
+	dk28->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk28->Name));
+	dk28->ast->m_NodeType = NT_SYMVAR;
+	dk28->Size = 8;
+	dk28->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA28", 8));
+	MemValue[StartAddress + 0x3393].push_back(dk28);
+
+	Value* dk29 = new Value("MEM29", 0);
+	dk29->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk29->Name));
+	dk29->ast->m_NodeType = NT_SYMVAR;
+	dk29->Size = 8;
+	dk29->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA29", 8));
+	MemValue[StartAddress + 0x3394].push_back(dk29);
+
+	Value* dk2a = new Value("MEM2A", 0);
+	dk2a->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk2a->Name));
+	dk2a->ast->m_NodeType = NT_SYMVAR;
+	dk2a->Size = 8;
+	dk2a->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA2A", 8));
+	MemValue[StartAddress + 0x3395].push_back(dk2a);
+
+	Value* dk2b = new Value("MEM2B", 0);
+	dk2b->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk2b->Name));
+	dk2b->ast->m_NodeType = NT_SYMVAR;
+	dk2b->Size = 8;
+	dk2b->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA2B", 8));
+	MemValue[StartAddress + 0x3396].push_back(dk2b);
+
+	Value* dk2c = new Value("MEM2C", 0);
+	dk2c->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk2c->Name));
+	dk2c->ast->m_NodeType = NT_SYMVAR;
+	dk2c->Size = 8;
+	dk2c->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA2C", 8));
+	MemValue[StartAddress + 0x3397].push_back(dk2c);
+
+	Value* dk2d = new Value("MEM2D", 0);
+	dk2d->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk2d->Name));
+	dk2d->ast->m_NodeType = NT_SYMVAR;
+	dk2d->Size = 8;
+	dk2d->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA2D", 8));
+	MemValue[StartAddress + 0x3398].push_back(dk2d);
+
+	Value* dk2e = new Value("MEM2E", 0);
+	dk2e->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk2e->Name));
+	dk2e->ast->m_NodeType = NT_SYMVAR;
+	dk2e->Size = 8;
+	dk2e->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA2E", 8));
+	MemValue[StartAddress + 0x3399].push_back(dk2e);
+
+	Value* dk2f = new Value("MEM2F", 0);
+	dk2f->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk2f->Name));
+	dk2f->ast->m_NodeType = NT_SYMVAR;
+	dk2f->Size = 8;
+	dk2f->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA2F", 8));
+	MemValue[StartAddress + 0x339A].push_back(dk2f);
+
+	Value* dk30 = new Value("MEM30", 0);
+	dk30->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk30->Name));
+	dk30->ast->m_NodeType = NT_SYMVAR;
+	dk30->Size = 8;
+	dk30->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA30", 8));
+	MemValue[StartAddress + 0x339B].push_back(dk30);
+
+	Value* dk31 = new Value("MEM31", 0);
+	dk31->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk31->Name));
+	dk31->ast->m_NodeType = NT_SYMVAR;
+	dk31->Size = 8;
+	dk31->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA31", 8));
+	MemValue[StartAddress + 0x339C].push_back(dk31);
+
+	Value* dk32 = new Value("MEM32", 0);
+	dk32->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk32->Name));
+	dk32->ast->m_NodeType = NT_SYMVAR;
+	dk32->Size = 8;
+	dk32->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA32", 8));
+	MemValue[StartAddress + 0x339D].push_back(dk32);
+
+	Value* dk33 = new Value("MEM33", 0);
+	dk33->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk33->Name));
+	dk33->ast->m_NodeType = NT_SYMVAR;
+	dk33->Size = 8;
+	dk33->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA33", 8));
+	MemValue[StartAddress + 0x339E].push_back(dk33);
+
+	Value* dk34 = new Value("MEM34", 0);
+	dk34->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk34->Name));
+	dk34->ast->m_NodeType = NT_SYMVAR;
+	dk34->Size = 8;
+	dk34->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA34", 8));
+	MemValue[StartAddress + 0x339F].push_back(dk34);
+
+	Value* dk35 = new Value("MEM35", 0);
+	dk35->ast = std::make_shared<BTreeNode>(MakeBTreeNode(dk35->Name));
+	dk35->ast->m_NodeType = NT_SYMVAR;
+	dk35->Size = 8;
+	dk35->z3ExprPtr = new z3::expr(z3Context->bv_const("MEMA35", 8));
+	MemValue[StartAddress + 0x33A0].push_back(dk35);
+
+	/*
 	_plugin_logprintf("initReg() start\n");
 	Value* eaxValue = new Value("EAX", 0);
 	eaxValue->ast = std::make_shared<BTreeNode>(MakeBTreeNode(eaxValue->Name));
@@ -1233,33 +1606,7 @@ PLUG_EXPORT void CBCREATEPROCESS(CBTYPE ctype, PLUG_CB_CREATEPROCESS* info)
 	regEax8lIR->Size = 8;
 	regEax8lIR->isTainted = true;
 	RegValue[REG_EAX_8L].push_back(regEax8lIR);
-
-	/*
-	Z3_context ctx = Z3_mk_context(Z3_mk_config());
-	auto dkrqnfrns1 = z3::expr(*z3Context, Z3_mk_fpa_fp(*z3Context,
-		Z3_mk_numeral(ctx, "0", Z3_mk_bv_sort(*z3Context, 1)),
-		Z3_mk_numeral(ctx, "1025", Z3_mk_bv_sort(*z3Context, 11)),
-		Z3_mk_numeral(ctx, "3377699720527872", Z3_mk_bv_sort(*z3Context, 52))));
-
-
-	auto dkrqnfrns2 = z3::expr(*z3Context, Z3_mk_fpa_fp(*z3Context,
-		Z3_mk_numeral(ctx, "0", Z3_mk_bv_sort(*z3Context, 1)),
-		Z3_mk_numeral(ctx, "120", Z3_mk_bv_sort(*z3Context, 11)),
-		Z3_mk_const(ctx, Z3_mk_string_symbol(*z3Context, "FPA_TEST"), Z3_mk_bv_sort(*z3Context, 52))));
-
-	_plugin_logprintf("BV FPA %s\n", z3::expr(*z3Context, Z3_mk_fpa_fp(*z3Context,
-		Z3_mk_numeral(ctx, "0", Z3_mk_bv_sort(*z3Context, 1)),
-		Z3_mk_numeral(ctx, "120", Z3_mk_bv_sort(*z3Context, 11)),
-		Z3_mk_const(ctx, Z3_mk_string_symbol(*z3Context, "FPA_TEST"), Z3_mk_bv_sort(*z3Context, 52)))).to_string().c_str());
-
-	auto dkrqnfrns3 = z3::expr(*z3Context, Z3_mk_fpa_numeral_double(*z3Context, 1.5, z3::sort(*z3Context, Z3_mk_fpa_sort_64(ctx))));
-
-	_plugin_logprintf("_plugin_logprintf %s\n", dkrqnfrns3.to_string().c_str());
-
-	auto ttet = Z3_mk_fpa_add(ctx, Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, "rm"), Z3_mk_fpa_rounding_mode_sort(ctx)), dkrqnfrns1, dkrqnfrns2);
-	Z3_mk_fpa_eq(ctx, ttet, dkrqnfrns3);
-	*/
-
+	
 	Value* ebxValue = new Value("EBX", 0);
 	ebxValue->ast = std::make_shared<BTreeNode>(MakeBTreeNode(ebxValue->Name));
 	ebxValue->ast->m_NodeType = NT_SYMVAR;
@@ -1365,24 +1712,59 @@ PLUG_EXPORT void CBCREATEPROCESS(CBTYPE ctype, PLUG_CB_CREATEPROCESS* info)
 	regEdi8lIR->isTainted = true;
 	RegValue[REG_EDI_8L].push_back(regEdi8lIR);
 
+	Value* ebpValue = new Value("EBP", 0);
+	ebpValue->ast = std::make_shared<BTreeNode>(MakeBTreeNode(ebpValue->Name));
+	ebpValue->ast->m_NodeType = NT_SYMVAR;
+	ebpValue->Size = 32;
+	ebpValue->z3ExprPtr = new z3::expr(z3Context->bv_const("REG_EBP", 32));
+	//z3Equation = new z3::expr(*z3esp);
+
+	IR* regEbp16hIR = new IR("EBP16H", RegValue[REG_EBP_16H].size(), IR::OPR::OPR_EXTRACT16H, ebpValue);
+	regEbp16hIR->Size = 16;
+	regEbp16hIR->isTainted = true;
+	RegValue[REG_EBP_16H].push_back(regEbp16hIR);
+
+	IR* regEbp8hIR = new IR("EBP8H", RegValue[REG_EBP_8H].size(), IR::OPR::OPR_EXTRACT8H, ebpValue);
+	regEbp8hIR->Size = 8;
+	regEbp8hIR->isTainted = true;
+	regEbp8hIR->isTainted = true;
+	RegValue[REG_EBP_8H].push_back(regEbp8hIR);
+
+	IR* regEbp8lIR = new IR("EBP8L", RegValue[REG_EBP_8L].size(), IR::OPR::OPR_EXTRACT8L, ebpValue);
+	regEbp8lIR->Size = 8;
+	regEbp8lIR->isTainted = true;
+	RegValue[REG_EBP_8L].push_back(regEbp8lIR);
+
 	Value* espValue = new Value("ESP", 0);
 	espValue->ast = std::make_shared<BTreeNode>(MakeBTreeNode(espValue->Name));
 	espValue->ast->m_NodeType = NT_SYMVAR;
 	espValue->Size = 32;
 	espValue->z3ExprPtr = new z3::expr(z3Context->bv_const("REG_ESP", 32));
-	//z3Equation = new z3::expr(*z3esp);
 
-	IR* regEsp16hIR = new IR("ESP16H", RegValue[REG_EBP_16H].size(), IR::OPR::OPR_EXTRACT16H, espValue);
+	IR* regEsp16hIR = new IR("ESP16H", RegValue[REG_ESP_16H].size(), IR::OPR::OPR_EXTRACT16H, espValue);
 	regEsp16hIR->Size = 16;
-	RegValue[REG_EBP_16H].push_back(regEsp16hIR);
+	//regEsp16hIR->isTainted = true;
+	RegValue[REG_ESP_16H].push_back(regEsp16hIR);
 
-	IR* regEsp8hIR = new IR("ESP8H", RegValue[REG_EBP_8H].size(), IR::OPR::OPR_EXTRACT8H, espValue);
+	IR* regEsp8hIR = new IR("ESP8H", RegValue[REG_ESP_8H].size(), IR::OPR::OPR_EXTRACT8H, espValue);
 	regEsp8hIR->Size = 8;
-	RegValue[REG_EBP_8H].push_back(regEsp8hIR);
+	//regEsp8hIR->isTainted = true;
+	RegValue[REG_ESP_8H].push_back(regEsp8hIR);
 
-	IR* regEsp8lIR = new IR("ESP8L", RegValue[REG_EBP_8L].size(), IR::OPR::OPR_EXTRACT8L, espValue);
+	IR* regEsp8lIR = new IR("ESP8L", RegValue[REG_ESP_8L].size(), IR::OPR::OPR_EXTRACT8L, espValue);
 	regEsp8lIR->Size = 8;
-	RegValue[REG_EBP_8L].push_back(regEsp8lIR);
+	//regEsp8lIR->isTainted = true;
+	RegValue[REG_ESP_8L].push_back(regEsp8lIR);
+
+	Value* cflagValue = new Value("EFLAG_CF", 0);
+	cflagValue->ast = std::make_shared<BTreeNode>(MakeBTreeNode(espValue->Name));
+	cflagValue->ast->m_NodeType = NT_SYMVAR;
+	cflagValue->Size = 1;
+	cflagValue->z3ExprPtr = new z3::expr(z3Context->bv_const("EFLAG_CF", 1));
+	RegValue[REG_CFLAG].push_back(cflagValue);
+
+	_plugin_logprintf("test %s\n", reg16hIR->z3ExprPtr->decl().name().str().c_str());
+	*/
 
 	StaticValue* eaxValue2 = new StaticValue("EAX", 0);
 	eaxValue2->Size = 32;

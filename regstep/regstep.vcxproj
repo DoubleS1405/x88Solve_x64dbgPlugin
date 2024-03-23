@@ -71,7 +71,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <TargetExt>.dp32</TargetExt>
-    <OutDir>.\x32\release</OutDir>
+    <OutDir>C:\Users\msi\Downloads\snapshot_2023-11-18_02-28\release\x32\plugins</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <TargetExt>.dp32</TargetExt>
@@ -163,6 +163,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="ast.cpp" />
+    <ClCompile Include="graph.cpp" />
     <ClCompile Include="optimize.cpp" />
     <ClCompile Include="plugin.cpp" />
     <ClCompile Include="pluginmain.cpp" />
@@ -170,6 +171,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ast.h" />
+    <ClInclude Include="graph.h" />
     <ClInclude Include="optimize.h" />
     <ClInclude Include="plugin.h" />
     <ClInclude Include="pluginmain.h" />
