@@ -190,6 +190,18 @@ public:
 	IR(OPR _opr, Value* op1, Value* op2, Value* op3);
 //#define DEBUG
 	IR(OPR _opr, Value* op1, Value* op2, Value* op3, Value* op4);
+
+	~IR()
+	{
+		for (auto it : Operands)
+		{
+			if (it != nullptr)
+			{
+				delete it;
+			}
+		}
+	}
+
 	string printOpr(OPR _opr);
 
 	void CreateZ3Expr(IR* _irPtr);
