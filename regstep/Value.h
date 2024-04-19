@@ -12,7 +12,6 @@
 #include "AST.h"
 #include "z3++.h"
 
-
 using namespace std;
 
 #define REG_EAX_16H (3*0)+0
