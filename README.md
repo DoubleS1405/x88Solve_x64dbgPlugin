@@ -1,7 +1,7 @@
 # Functions
-1. IR(intermediate representation) Generation (SSA Form Based)
+1. Lift x86 instructions to IR(intermediate representation) (SSA Form Based)
 2. IR Optimization
-3. dynamic symbolic analysis with IR
+3. Dynamic symbolic analysis with IR
 
 # IR Optimization
 ## Dead Store Elimination
@@ -12,3 +12,35 @@
 (2) Optimized Code <br>
 ![image](https://github.com/DoubleS1405/x86_Optimizing/assets/15829327/691a1703-4d8c-40d1-88f4-3089e73827e0)<br><br>
 <br>
+
+# Dynamic symbolic analysis with IR
+## Dead Store Elimination
+
+(1) First Char<br>
+![image](https://github.com/DoubleS1405/x88Solve_x64dbgPlugin/assets/15829327/52413d62-f633-4656-bdda-57e205318a5b) <br><br>
+
+0x71 -> q  <br>
+
+(2) Second Char<br>
+
+![image](https://github.com/DoubleS1405/x88Solve_x64dbgPlugin/assets/15829327/e9ab8eed-a020-4e8c-86f0-b4c79dd06128) <br><br>
+
+0x65 -> e  <br>
+
+(3) Third Char<br>
+
+![image](https://github.com/DoubleS1405/x88Solve_x64dbgPlugin/assets/15829327/0176a0f2-3654-401d-aa5f-7d323a153656) <br><br>
+
+0x7a->z  <br>
+
+(4) Fourth Char<br>
+
+![image](https://github.com/DoubleS1405/x88Solve_x64dbgPlugin/assets/15829327/b9f55688-5754-4830-a86e-2c3e8d395c1c) <br><br>
+
+0x6a->j  <br>
+
+(5) Fifth Char<br>
+
+![image](https://github.com/DoubleS1405/x88Solve_x64dbgPlugin/assets/15829327/6f2e5e14-1467-4697-9f25-cc8e991b86be) <br><br>
+
+0x64->d  <br>
