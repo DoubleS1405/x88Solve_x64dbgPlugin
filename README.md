@@ -44,3 +44,10 @@
 ![image](https://github.com/DoubleS1405/x88Solve_x64dbgPlugin/assets/15829327/6f2e5e14-1467-4697-9f25-cc8e991b86be) <br><br>
 
 0x64->d  <br>
+
+(6) Last Char <br>
+
+(7) Flag <br>
+
+![image](https://github.com/DoubleS1405/x88Solve_x64dbgPlugin/assets/15829327/769baa6f-8dec-4741-afce-9ec01734039f) <br><br>
+
