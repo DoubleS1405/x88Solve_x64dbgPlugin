@@ -3,6 +3,10 @@
 2. IR Optimization
 3. Dynamic symbolic analysis with IR
 
+# Libraries
+1. Zydis
+2. Z3
+
 # IR Optimization
 ## Dead Store Elimination
 
