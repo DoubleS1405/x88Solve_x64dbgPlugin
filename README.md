@@ -1,7 +1,9 @@
-# x88Solve_x64dbgPlugin
-Z3 + x64dbg Plugin SDK
+# Functions
+1. IR(intermediate representation) Generation (SSA Form Based)
+2. IR Optimization
+3. dynamic symbolic analysis with IR
 
-# Bytecode Optimization
+# IR Optimization
 ## Dead Store Elimination
 
 - Example<br>
