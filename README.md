@@ -1,9 +1,8 @@
 # x88Solve_x64dbgPlugin
 Z3 + x64dbg Plugin SDK
 
-# Dead Store Elimination
-- Project Objective : Perform "optimization" on the x86 binary with the dummy code applied.<br>
-<br>
+# Bytecode Optimization
+## Dead Store Elimination
 
 - Example<br>
 
