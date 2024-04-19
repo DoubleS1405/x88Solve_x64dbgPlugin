@@ -13,8 +13,8 @@
 ![image](https://github.com/DoubleS1405/x86_Optimizing/assets/15829327/691a1703-4d8c-40d1-88f4-3089e73827e0)<br><br>
 <br>
 
-# Dynamic symbolic analysis with IR
-## Dead Store Elimination
+# Dynamic Symbolic Analysis with IR
+## Solve CTF with Dynamic Symbolic Analysis + Z3
 
 (1) First Char<br>
 ![image](https://github.com/DoubleS1405/x88Solve_x64dbgPlugin/assets/15829327/52413d62-f633-4656-bdda-57e205318a5b) <br><br>
